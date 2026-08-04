@@ -172,6 +172,7 @@ def test_abstains_rather_than_returning_a_generic_psalm(pipe):
 
 # --- latency (M2 DoD: p95 < 100 ms) ----------------------------------------
 
+@pytest.mark.perf
 def test_p95_latency_under_100ms(pipe):
     timings = []
     for case in SITUATIONS:

@@ -142,6 +142,42 @@ From section 11. I have not guessed at any of them.
    under `data/` is committed, so this only matters if you later ship the text
    in an image or a release.
 
+## CI/CD
+
+`.github/workflows/ci.yml` runs on every push and PR:
+
+| Job | What it does | Blocks a merge |
+| --- | --- | --- |
+| `quick` | byte-compile + import smoke; needs no data or secrets, so it runs on fork PRs too | yes |
+| `test` | full build, then `pytest -m "not perf"` — 179 tests | yes |
+| `perf` | the 4 wall-clock latency tests; numbers land in the run summary | **no** (`continue-on-error`) |
+| `docker` | builds `deploy/Dockerfile`, starts the container, asserts `/health` reports `status: ok` and `/suggest` returns a suggestion, records resident memory | yes |
+| `deploy` | on `main` only, after the three above: triggers Render, polls until `live`, smoke-tests the public URL | — |
+
+The latency budgets are tuned for a quiet machine, so they are advisory in CI and
+strict locally: `make test` applies no marker filter and still runs all 183.
+
+CI cannot build the datasets from the repo alone — the source books are
+copyrighted and arrive via `PRAYER_DATA_URL`. That secret is unavailable to
+pull requests from forks, so `test`/`perf`/`docker`/`deploy` skip there and
+`quick` carries the signal.
+
+Deployment is Render (`render.yaml`, at the repo root because that is the only
+place Render looks). `autoDeploy` is **off**: CI owns deployment, which is what
+makes "tests before deploy" true rather than a coincidence of timing.
+`.github/workflows/deploy.yml` is the manual redeploy/rollback path — it takes a
+commit SHA, which a deploy hook cannot.
+
+### What you still have to set up
+
+| Where | Name | Kind |
+| --- | --- | --- |
+| GitHub repo secret | `PRAYER_DATA_URL` | tar.gz of `data/input/` |
+| GitHub environment `production` | `RENDER_API_KEY` | Render API key |
+| GitHub repo variable | `RENDER_SERVICE_ID` | `srv-…` |
+| GitHub repo variable | `RENDER_SERVICE_URL` | the public URL |
+| Render dashboard | `PRAYER_DATA_URL` | same value; `sync: false` in `render.yaml` |
+
 ## Tests
 
 ```bash

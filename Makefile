@@ -20,7 +20,7 @@ fetch:  ## download the cleaned source markdown into data/input/
 	  exit 1; \
 	fi
 	@mkdir -p data/input
-	curl -fsSL "$(PRAYER_DATA_URL)" | tar -xz -C data/input
+	@curl -fsSL "$(PRAYER_DATA_URL)" | tar -xz -C data/input
 	@echo "input: $$(ls data/input | tr '\n' ' ')"
 
 data:  ## build the datasets from data/input/ (stdlib only, ~1s)

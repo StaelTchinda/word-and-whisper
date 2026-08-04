@@ -8,6 +8,9 @@
 data/
 
 venv/
+
+# Editor / agent working state, not project content.
+.claude/
 __pycache__/
 *.py[cod]
 *.egg-info/

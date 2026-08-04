@@ -1,0 +1,77 @@
+name: deploy
+
+# Manual deploy / rollback. The automatic path lives in ci.yml and only runs
+# after the suite passes on main; this is the escape hatch for redeploying or
+# for pinning a known-good commit after a bad one went out.
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Commit SHA to deploy (blank = current tip of main)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment:
+      name: production
+      url: ${{ vars.RENDER_SERVICE_URL }}
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      # The REST API accepts a commitId; a deploy hook cannot, which is what
+      # makes this the rollback path rather than just a repeat of ci.yml.
+      - name: Trigger the Render deploy
+        id: dep
+        env:
+          KEY: ${{ secrets.RENDER_API_KEY }}
+          SVC: ${{ vars.RENDER_SERVICE_ID }}
+          SHA: ${{ inputs.commit }}
+        run: |
+          set -euo pipefail
+          payload=$(jq -nc --arg c "$SHA" \
+            'if $c == "" then {clearCache:"do_not_clear"}
+             else {commitId:$c, clearCache:"do_not_clear"} end')
+          id=$(curl -fsS -X POST "https://api.render.com/v1/services/$SVC/deploys" \
+                -H "Authorization: Bearer $KEY" \
+                -H 'content-type: application/json' \
+                -d "$payload" | jq -r .id)
+          [ -n "$id" ] && [ "$id" != "null" ] || { echo "::error::no deploy id returned"; exit 1; }
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          echo "::notice::Render deploy $id started (commit: ${SHA:-main tip})"
+
+      - name: Wait for it to go live
+        env:
+          KEY: ${{ secrets.RENDER_API_KEY }}
+          SVC: ${{ vars.RENDER_SERVICE_ID }}
+          DEP: ${{ steps.dep.outputs.id }}
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 180); do
+            s=$(curl -fsS -H "Authorization: Bearer $KEY" -H 'accept: application/json' \
+                 "https://api.render.com/v1/services/$SVC/deploys/$DEP" | jq -r .status)
+            echo "status=$s"
+            case "$s" in
+              live) exit 0 ;;
+              build_failed|update_failed|pre_deploy_failed|canceled|deactivated)
+                echo "::error::Render deploy $DEP ended in $s"; exit 1 ;;
+            esac
+            sleep 10
+          done
+          echo "::error::timed out waiting for deploy $DEP"
+          exit 1
+
+      - name: Post-deploy smoke
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 30); do
+            body=$(curl -fsS "${{ vars.RENDER_SERVICE_URL }}/health") && break || sleep 10
+          done
+          echo "$body"
+          echo "$body" | jq -e '.status == "ok" and .prayers > 0 and .passages > 0'
