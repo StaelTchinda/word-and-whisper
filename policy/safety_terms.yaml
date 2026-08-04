@@ -1,0 +1,125 @@
+# Crisis detection terms — PRODUCT_BOOK section 7.1.
+#
+# Deterministic by design: keyword and regex lists, versioned in YAML, so the
+# gate is auditable and testable rather than a model's opinion. It runs before
+# retrieval on every request regardless of configuration (C7).
+#
+# Tuned to accept false positives over false negatives. A person who is fine
+# and gets a crisis notice is mildly over-served; the reverse is a real harm.
+#
+# >>> HUMAN SIGN-OFF REQUIRED <<<
+# `notice` below is a PLACEHOLDER. PRODUCT_BOOK section 11 item 3 assigns the
+# crisis-notice wording and locale to the human, and forbids the agent from
+# inventing crisis-line numbers. The text here deliberately contains no phone
+# number and no organisation name. Replace it before this service is exposed
+# to any real user.
+
+version: 1
+sign_off: pending          # set to a name + date when the wording is approved
+
+categories:
+  - name: suicidal_ideation
+    terms:
+      - kill myself
+      - killing myself
+      - end my life
+      - ending my life
+      - take my own life
+      - end it all
+      - don't want to live
+      - do not want to live
+      - dont want to live
+      - want to die
+      - wish i was dead
+      - wish i were dead
+      - better off dead
+      - suicidal
+      - suicide
+      - no reason to live
+      - not worth living
+      - can't go on
+      - cant go on
+    patterns:
+      - '\bkill(ing)?\s+(my)?self\b'
+      - '\bend(ing)?\s+(it|my\s+life)\b'
+
+  - name: self_harm
+    terms:
+      - cut myself
+      - cutting myself
+      - self harm
+      - self-harm
+      - hurt myself
+      - hurting myself
+      - starve myself
+      - overdose
+      - od'd
+    patterns:
+      - '\b(hurt|harm|cut)(ing)?\s+my\s*self\b'
+
+  - name: abuse
+    terms:
+      - he hits me
+      - she hits me
+      - they hit me
+      - beats me
+      - beating me
+      - hits me
+      - abusive
+      - abuses me
+      - abused
+      - abusing me
+      - raped
+      - rape
+      - sexually assaulted
+      - molested
+      - domestic violence
+      - afraid of my husband
+      - afraid of my wife
+      - afraid of my partner
+      - won't let me leave
+      - wont let me leave
+      - threatens me
+      - trafficked
+    patterns:
+      - '\b(hits|hit|beats|beat|strangl\w+|chok\w+)\s+me\b'
+
+  - name: violence_to_others
+    terms:
+      - kill him
+      - kill her
+      - kill them
+      - hurt him
+      - hurt her
+      - hurt them
+      - make them pay
+      - want them dead
+      - want him dead
+      - want her dead
+      - shoot them
+      - revenge on
+      - get back at
+    patterns:
+      - '\b(kill|shoot|stab|hurt)\s+(him|her|them|someone|everyone)\b'
+
+  - name: harm_to_child
+    terms:
+      - hurt my child
+      - hurt my baby
+      - hurt my kids
+      - shake the baby
+      - can't stop screaming at my
+      - afraid i will hurt
+
+# Content labels the crisis path is allowed to retrieve from (section 7.1).
+# A person in crisis is met with lament, petition and complaint -- the corpus's
+# honest prayers -- not with praise or blessing.
+allowed_contents: [lament, petition, complaint, intercession, repentance]
+
+# PLACEHOLDER. See the sign-off note above.
+notice: >-
+  Some of what you have written suggests you may be in danger or in real
+  distress. A prayer is worth praying, and it is not a substitute for help
+  from a person. Please contact a local emergency number or a crisis helpline
+  in your country now, or tell someone you trust today. If you are in
+  immediate danger, contact emergency services.

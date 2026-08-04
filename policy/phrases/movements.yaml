@@ -1,0 +1,184 @@
+# Phrase bank for the deterministic composer — PRODUCT_BOOK sections 5.4, 5.5.
+#
+# This is the floor of the entire product: it is what a user gets whenever a
+# model is slow, absent, or wrong, and it is what F1 smooths rather than
+# replaces. It is worth writing well.
+#
+# Rules the wording here has to respect:
+#   - No scripture outside the `anchor` movement. Nothing in this file may
+#     quote or near-quote a verse; these are the composer's own words.
+#   - No claims about what God will do. Petition, not prediction.
+#   - Plain speech. A person says these out loud, possibly while crying.
+#
+# Selection is deterministic: the index is derived from the prayer_id, so the
+# same record always yields the same phrasing (golden-file tests in
+# tests/test_deterministic_golden.py depend on this).
+
+version: 1
+
+# --- address ---------------------------------------------------------------
+# Used only when the passage has no vocative of its own. When it does, the
+# passage's address wins -- it is the prayer's own way of naming God.
+address:
+  fallback:
+    - "God,"
+    - "Lord God,"
+    - "O Lord,"
+    - "Father,"
+    - "God of all mercy,"
+
+# --- naming ----------------------------------------------------------------
+# The lead-in before the user's own words. The user's situation itself is never
+# rewritten beyond contraction expansion and person conversion.
+naming:
+  first_person:
+    - "This is where I am:"
+    - "Here is the truth of it:"
+    - "I am not going to dress this up:"
+    - "This is what is actually happening:"
+    - "You already know this, but I will say it:"
+  intercessory:
+    - "I am not asking for myself:"
+    - "I bring someone else to you:"
+    - "This is not my burden to carry, and I carry it anyway:"
+    - "Hear me on their behalf:"
+
+# --- ask -------------------------------------------------------------------
+# Chosen by the record's content labels, so the petition matches what the
+# source prayer actually did.
+ask:
+  by_content:
+    petition:
+      - "So I ask you plainly, because you are the one who gives."
+      - "I am asking. Not hinting, not hoping quietly — asking."
+      - "Do something. I am asking you to act."
+    intercession:
+      - "Stand between them and this. I am asking on their behalf."
+      - "Do for them what they cannot do for themselves."
+    lament:
+      - "I have no tidy ending for this. Stay with me in it."
+      - "Do not ask me to be finished grieving before I am."
+    complaint:
+      - "This is not right, and I am bringing it to you rather than swallowing it."
+      - "I am telling you exactly what is wrong, because you can be told."
+    repentance:
+      - "I have done wrong, and I am not explaining it away. Forgive me."
+      - "Turn me around. I cannot do it from here."
+    confession:
+      - "I say it again where I can hear myself: you are God and I am not."
+    thanksgiving:
+      - "Thank you. I want to say it before anything else changes."
+    praise:
+      - "You are worth saying this to, whatever comes of it."
+    blessing:
+      - "Let your goodness rest on this, and on the people in it."
+    query:
+      - "Show me what to do. I will go where you point."
+      - "I do not know the way through. Tell me."
+    oath:
+      - "I mean this, and I will hold to it."
+    consecration:
+      - "Take this and use it. It is yours."
+    affirmation:
+      - "I agree with you, even here."
+  # PRODUCT_BOOK section 7.3. For records labelled `imprecation` or `curse`,
+  # the ask ONLY ever requests justice, vindication and rescue, and explicitly
+  # leaves judgment with God. The instructions may explain what the psalmist
+  # asked for; the spoken prayer never puts it in the user's mouth.
+  imprecatory:
+    - "Judge this rightly. Judgment is yours and not mine, and I am handing it over."
+    - "Vindicate me. I am not asking for harm to come to anyone — I am asking you to put this right."
+    - "See what has been done, and answer it as only you can. I leave the reckoning to you."
+  default:
+    - "Hear me, and answer."
+    - "Meet me here."
+  # Appended, in order and without repetition, when a prayer built from a very
+  # short passage falls under the 60-word floor. 94 of the 224 records are a
+  # single verse and some are under a dozen words, so this is the common case,
+  # not an edge case -- these lines have to be worth saying rather than filler.
+  extensions:
+    - "Do not let me carry this on my own."
+    - "I am not going anywhere until I have said it."
+    - "Stay near while I wait for an answer."
+    - "I am saying it badly. Hear it anyway."
+    - "Whatever else is true today, this is true: I brought it to you."
+    - "I would rather ask you and be told no than never ask."
+
+# --- trust -----------------------------------------------------------------
+# Optional. Omitted where the source prayer has none -- laments frequently
+# have no resolution, and manufacturing one misrepresents the passage.
+trust:
+  by_content:
+    praise:
+      - "You have been God for longer than this has been my problem."
+    thanksgiving:
+      - "You have not forgotten me before. I am counting on that."
+    confession:
+      - "I am staying with you either way."
+    affirmation:
+      - "I hold to this even when I cannot feel it."
+    blessing:
+      - "Your goodness is not in short supply."
+    oath:
+      - "You keep your word. I am leaning on that and not on mine."
+  default:
+    - "And where I cannot see, hold me anyway."
+
+# --- close -----------------------------------------------------------------
+close:
+  default:
+    - "Amen."
+    - "In your name. Amen."
+    - "This is my prayer. Amen."
+
+# --- instructions ----------------------------------------------------------
+# `why_it_fits` and `how_to_pray` are assembled from these fragments. They
+# describe the passage and the practice; they never make a claim about what
+# God will do in the user's situation.
+instructions:
+  why_it_fits:
+    template: "{speaker_clause} {contents_clause}{themes_clause}"
+    speaker_by_collective:
+      false: "{speaker} prayed this {context_gloss}."
+      true: "This was prayed by {speaker}, {context_gloss}."
+    contents_clause: "It is a prayer of {contents}."
+    themes_clause: " Your situation touches the same ground: {themes}."
+    themes_clause_empty: ""
+
+  context_gloss:
+    solitary: "on their own, out of earshot of anyone else"
+    communal: "out loud, in front of other people"
+    ritual: "as part of worship, in words that were meant to be repeated"
+    literary: "in a passage that sets the prayer down as a set piece"
+    prophetic: "while under the pressure of a word from God"
+    theophanic: "face to face with God's own presence"
+    other: "in circumstances the source does not classify further"
+
+  how_to_pray:
+    by_context:
+      solitary: "Pray this alone and out loud, unhurried. Out loud matters — it makes it yours rather than a thought you had."
+      communal: "This one was prayed in company. Say it with someone if you can; if you cannot, say it as though someone were listening, because someone is."
+      ritual: "These words were written to be used again. You do not have to feel them for them to be true; say them and let them do the work."
+      literary: "This is a set piece rather than an overheard prayer, so take it slowly and let the shape of it lead you."
+      prophetic: "This was prayed under pressure. Do not smooth it out."
+      theophanic: "This was said in God's presence. Begin by stopping."
+      other: "Take it slowly, and say it out loud."
+    single_verse_note: " It is a single verse, so there is not much to lean on — say it, then keep going in your own words."
+    long_passage_note: " The full passage is long; the lines below are the part to hold on to."
+    specifics_note: " Say the actual details — the names, the numbers, the length of time. Vagueness is the enemy of this."
+    imprecatory_note: " The psalmist here asked God to come down on his enemies. You do not have to. Ask for justice and leave the reckoning where it belongs."
+
+  posture:
+    solitary: "Alone, out loud, unhurried."
+    communal: "With others if you can, or aloud as if with them."
+    ritual: "Still, and unhurried. Repetition is allowed."
+    literary: "Seated, slowly, reading it more than once."
+    prophetic: "However you are. Do not compose yourself first."
+    theophanic: "Stopped, and quiet, before you begin."
+    other: "However you can, out loud."
+
+# --- explain_only ----------------------------------------------------------
+# Shown instead of a spoken prayer for records the compose policy withholds.
+explain_only_note: >-
+  This prayer is in the Bible, but it is not offered here as words for you to
+  say. See the reason below.

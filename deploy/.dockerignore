@@ -1,0 +1,12 @@
+# Build context: source, policy and packaging only. The image builds its own
+# data at build time, so none of data/ is copied in.
+data/
+trash/
+venv/
+tests/
+docs/
+.git/
+.pytest_cache/
+__pycache__/
+*.egg-info/
+.DS_Store

@@ -1,0 +1,21 @@
+# Nothing under data/ belongs in version control.
+#
+#   data/input   the cleaned source markdown — the books are copyrighted
+#                (Parks 2021, Lockyer 1959); downloaded by `make fetch`
+#   data/scans   the original PDFs, ~370 MB
+#   data/vendor  downloads: the embedding model, the WEB archives
+#   data/build   generated; `make data` rebuilds it in about a second
+data/
+
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.DS_Store
+
+# Abandoned working material; not part of the project.
+trash/
+
+# bench/baselines/ IS committed: recorded milestone results are the floors
+# later changes are measured against, not something a command regenerates.

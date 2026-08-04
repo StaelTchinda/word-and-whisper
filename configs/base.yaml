@@ -1,0 +1,40 @@
+# Runtime configuration for the prayer suggestion API.
+# Every key here can be overridden with a PRAYER_<KEY> environment variable.
+
+defaults:
+  retriever: bm25
+  composer: deterministic
+  translation: WEB
+  k: 3
+
+retrieval:
+  # Local ONNX bi-encoder for R2/R3. Downloaded once by
+  # `make index`; never fetched at request time.
+  embedding_model_dir: data/vendor/models/bge-small-en-v1.5
+  # Below this score the service abstains rather than returning the nearest
+  # generic psalm (C4). Set conservatively low until M8 tunes it on Tier 3 dev.
+  abstain_threshold: 0.08
+  # 43 of 224 records are Psalms and the most thematically generic; this
+  # penalty is the diversification knob. Left at 0 until measured.
+  psalm_penalty: 0.0
+  candidate_pool: 25
+  # Query-side ONNX threads only; the index build is always single-threaded
+  # so it stays byte-reproducible.
+  embedding_threads: 4
+
+composition:
+  max_passage_verses_inline: 20
+  excerpt_verses: 8
+  compose_timeout_s: 8.0
+  # F4 free generation: default off. See PRODUCT_BOOK section 5.5.
+  enable_free_composer: false
+
+llm:
+  llm_backend: "null"
+  llm_model_path: null
+  llm_max_tokens: 512
+  llm_timeout_s: 6.0
+
+ops:
+  log_situations: false
+  rate_limit_per_minute: 60

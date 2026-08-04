@@ -1,0 +1,186 @@
+# Situation lexicon — SituationAnalyzer v1 (PRODUCT_BOOK section 8, M2).
+#
+# Maps what a person actually writes onto the dataset's own content vocabulary.
+# This file is the bridge between two vocabularies that do not overlap: users
+# say "I got laid off", the corpus says "petition, complaint". Tier 1 of the
+# benchmark cannot measure this at all (users don't speak in prayer titles),
+# so this is the piece that most needs human review and Tier 3 evidence.
+#
+# `contents` values must exist in data/build/datasets/sources/parks2021/vocab/contents.csv.
+# `contexts` values must exist in data/build/datasets/sources/parks2021/vocab/contexts.csv.
+# `terms` are matched case-insensitively against the whole situation string,
+# on word boundaries, so multi-word phrases work.
+#
+# `expansions` are the bridge that makes lexical retrieval work at all. A user
+# writes "trying for a child"; the passage says "boy", "womb", "barren",
+# "remember me". Without expansion, BM25 has literally no term in common with
+# the right record. These are weighted below the user's own words so they
+# steer ranking without overriding it.
+
+version: 1
+
+themes:
+  - name: grief
+    terms: [died, death, passed away, funeral, grief, grieving, mourning, mourn,
+            lost my, loss of, bereaved, widow, widowed, burying, buried]
+    expansions: [mourn, mourning, weep, weeping, tears, comfort, grave, dust, ashes, bereaved, dead, buried]
+    contents: [lament, complaint, petition]
+    contexts: [solitary]
+
+  - name: illness
+    terms: [sick, illness, ill, cancer, diagnosis, diagnosed, hospital, surgery,
+            disease, pain, chronic, dying, terminal, tumour, tumor, chemo]
+    expansions: [heal, healing, health, restore, sick, disease, plague, physician, strength, body]
+    contents: [petition, lament, intercession]
+
+  - name: fear
+    terms: [afraid, fear, scared, terrified, anxious, anxiety, panic, dread,
+            worried, worry, frightened, nervous]
+    expansions: [afraid, fear, deliver, refuge, strength, shield, help, trouble, trembling]
+    contents: [petition, complaint]
+
+  - name: guilt
+    terms: [guilty, guilt, ashamed, shame, sinned, sin, wrong, regret, remorse,
+            failed god, betrayed, cheated, lied, addiction, relapsed, relapse]
+    expansions: [sin, sins, iniquity, transgression, transgressions, cleanse, forgive, mercy, blot, confess, wicked]
+    contents: [repentance, confession, petition]
+
+  - name: gratitude
+    terms: [thankful, thank you, grateful, gratitude, blessed, answered,
+            came through, healed, recovered, celebrate, good news]
+    expansions: [thanks, thanksgiving, praise, bless, blessed, good, goodness, wonderful, marvellous]
+    contents: [thanksgiving, praise, blessing]
+
+  - name: injustice
+    terms: [unfair, unjust, injustice, wronged, slandered, lied about, framed,
+            falsely accused, accused, betrayed me, cheated me, stole, robbed,
+            bullied, harassed, discriminated, racist, mistreated,
+            spread lies, lies about, rumours, rumors, passed over, overlooked,
+            took credit, scapegoat, blamed me, no one believed me]
+    expansions: [judge, justice, judgment, righteous, righteousness, vindicate, plead, cause, innocent, accusers, "false"]
+    contents: [complaint, imprecation, petition]
+
+  - name: enemies
+    terms: [enemy, enemies, against me, attacking, attacked, hate me, hates me,
+            out to get, adversary, opponents, persecuted, threatened]
+    expansions: [enemies, enemy, adversaries, persecute, deliver, snare, refuge, rise, against, surround]
+    contents: [petition, complaint, imprecation]
+
+  - name: waiting
+    terms: [waiting, waited, still nothing, how long, years, hoping, hope,
+            losing hope, hopeless, no answer, silence, unanswered, infertility,
+            infertile, trying for a child, ivf, miscarriage, barren, childless]
+    expansions: [son, child, boy, barren, womb, conceive, remember, affliction, vow, forgotten, long]
+    contents: [petition, lament, complaint]
+
+  - name: guidance
+    terms: [decision, decide, choose, choice, which way, direction, guidance,
+            guide me, don't know what, unsure, discern, calling, should i,
+            next step, crossroads]
+    expansions: [way, path, teach, show, know, knowledge, understanding, wisdom, counsel, guide, lead]
+    contents: [query, petition]
+
+  - name: provision
+    terms: [money, rent, bills, debt, broke, poverty, poor, hungry, food,
+            job, laid off, redundant, fired, unemployed, work, income,
+            can't afford, evicted, homeless]
+    expansions: [bread, daily, need, needy, poor, provide, hunger, famine, harvest, give]
+    contents: [petition, complaint]
+
+  - name: protection
+    terms: [danger, unsafe, protect, protection, safety, threat, travelling,
+            travel, war, violence, storm, disaster, evacuate, flee]
+    expansions: [deliver, save, refuge, fortress, shield, keep, preserve, hand, safety]
+    contents: [petition, intercession]
+
+  - name: loneliness
+    terms: [alone, lonely, loneliness, isolated, no one, nobody, abandoned,
+            forgotten, friendless, left me, rejected]
+    expansions: [forsaken, alone, forgotten, far, hide, face, desolate, abandoned]
+    contents: [complaint, lament, petition]
+
+  - name: family
+    terms: [my child, my son, my daughter, my mother, my father, my wife,
+            my husband, my parents, my brother, my sister, marriage, divorce,
+            family, kids, children, pregnant, birth]
+    expansions: [son, daughter, child, children, wife, husband, house, offspring, seed, barren]
+    contents: [intercession, petition, blessing]
+
+  - name: conflict
+    terms: [argument, fight, fighting, conflict, fell out, estranged,
+            not speaking, reconcile, forgive, forgiveness, apologise, apologize,
+            bitter, resentment]
+    expansions: [peace, brother, brethren, anger, forgive, wrath, strife, against, reconcile]
+    contents: [petition, repentance, intercession]
+
+  - name: doubt
+    terms: [doubt, doubting, don't believe, lost my faith, losing faith,
+            where is god, does god, is god real, angry at god, why would god]
+    expansions: [long, why, forsaken, hidden, silent, faith, believe, hear, answer]
+    contents: [complaint, lament, query, confession]
+
+  - name: deliverance
+    terms: [trapped, stuck, way out, rescue, deliver, save me, drowning,
+            overwhelmed, can't cope, breaking point, exhausted, burnt out,
+            burned out]
+    expansions: [deliver, save, rescue, depths, pit, waters, cry, distress, trouble, strength]
+    contents: [petition, lament]
+
+  - name: worship
+    terms: [worship, praise, glory, adore, holy, majesty, wonder, awe,
+            creation, beautiful, marvel]
+    expansions: [glory, holy, majesty, praise, exalt, wonderful, heavens, greatness]
+    contents: [praise, affirmation]
+
+  - name: commitment
+    terms: [dedicate, dedicating, promise, vow, commit, committing, give my life,
+            surrender, offering, consecrate]
+    expansions: [vow, oath, serve, offer, dedicate, consecrate, holy, servant]
+    contents: [oath, consecration, confession]
+
+  - name: leadership
+    terms: [my team, my church, my congregation, leading, leader, responsibility,
+            in charge, my students, my patients, my staff, community, nation,
+            our country, our city]
+    expansions: [people, nation, servant, shepherd, king, deliver, bless, congregation]
+    contents: [intercession, petition]
+    contexts: [communal]
+
+# Situations about someone else switch the spoken prayer to "we"/"them"
+# (PRODUCT_BOOK section 5.4). Matched the same way as theme terms.
+intercessory_markers:
+  - my friend
+  - my wife
+  - my husband
+  - my son
+  - my daughter
+  - my child
+  - my mother
+  - my father
+  - my brother
+  - my sister
+  - my parents
+  - my colleague
+  - my neighbour
+  - my neighbor
+  - my team
+  - my church
+  - my students
+  - my patients
+  - for him
+  - for her
+  - for them
+  - someone i
+  - a friend of mine
+  - his
+  - her
+
+# Tokens with no discriminating power in a corpus that is entirely prayer.
+stopwords: [i, me, my, myself, we, us, our, you, your, he, him, his, she, her,
+            they, them, their, it, its, a, an, the, and, or, but, if, then, so,
+            of, in, "on", at, to, for, with, from, by, as, is, am, are, was, were,
+            be, been, being, have, has, had, do, does, did, will, would, shall,
+            should, can, could, may, might, must, not, "no", this, that, these,
+            those, there, here, what, which, who, whom, when, where, how, why,
+            all, any, some, very, just, really, about, up, down, out, over,
+            god, lord, pray, prayer, praying]

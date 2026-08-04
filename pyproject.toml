@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prayer"
+version = "0.1.0"
+description = "Suggests biblical prayers for a described situation, with a ready-to-speak prayer"
+requires-python = ">=3.12"
+
+# Everything the service needs — and, deliberately, everything the dataset
+# build needs too. The extractors are stdlib-only and the whole build takes
+# about a second, so a deployment can rebuild its own data at image-build time
+# rather than shipping a prebuilt artifact.
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic>=2",
+    "pydantic-settings",
+    "numpy",
+    "onnxruntime",
+    "tokenizers",
+    "PyYAML",
+    "Jinja2",
+    "huggingface_hub",
+]
+
+[project.optional-dependencies]
+# Converts scanned PDFs into the cleaned markdown under data/input/. Runs once,
+# by hand, on a laptop — never in the deployed image. This is the heavy half:
+# torch alone is several hundred megabytes.
+extract = [
+    "pymupdf",
+    "pdf2image",
+    "pytesseract",
+    "beautifulsoup4",
+    "markdownify",
+    "textstat",
+]
+# Evaluation harness. language_tool_python needs a JVM and downloads a language
+# pack on first use, so it stays out of the runtime dependency set.
+bench = [
+    "textstat",
+    "language_tool_python",
+]
+dev = [
+    "pytest",
+    "httpx",
+]
+
+[project.scripts]
+prayer-extract = "prayer.extract.__main__:main"
+prayer-serve = "prayer.api.__main__:main"
+prayer-bench = "prayer.bench.run:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
