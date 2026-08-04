@@ -173,10 +173,16 @@ commit SHA, which a deploy hook cannot.
 | Where | Name | Kind |
 | --- | --- | --- |
 | GitHub repo secret | `PRAYER_DATA_URL` | tar.gz of `data/input/` |
+| GitHub repo secret | `PRAYER_DATA_TOKEN` | optional; bearer token when that URL needs auth |
 | GitHub environment `production` | `RENDER_API_KEY` | Render API key |
 | GitHub repo variable | `RENDER_SERVICE_ID` | `srv-…` |
 | GitHub repo variable | `RENDER_SERVICE_URL` | the public URL |
 | Render dashboard | `PRAYER_DATA_URL` | same value; `sync: false` in `render.yaml` |
+| Render dashboard | `PRAYER_DATA_TOKEN` | same as above, if used |
+
+Measured footprint, which is why `render.yaml` asks for the free plan: **73 MB**
+at startup on the `bm25` default, **~321 MB** once a hybrid request loads the
+ONNX session — inside a 512 MB instance either way.
 
 ## Tests
 

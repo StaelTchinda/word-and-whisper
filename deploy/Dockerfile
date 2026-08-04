@@ -37,11 +37,17 @@ from prayer import paths; download_model(paths.EMBEDDING_MODEL)"
 # archive of data/input/. Without it the build stops here rather than producing
 # an image that would fail at runtime.
 ARG PRAYER_DATA_URL
-RUN test -n "$PRAYER_DATA_URL" || \
+# Optional: a bearer token, when the archive lives in a private repo. Empty for
+# a pre-signed URL, which carries its own authentication.
+ARG PRAYER_DATA_TOKEN=""
+RUN TOK="$PRAYER_DATA_TOKEN"; export TOK; test -n "$PRAYER_DATA_URL" || \
       (echo "PRAYER_DATA_URL build-arg is required" && exit 1) \
  && mkdir -p data/input \
- && python -c "import urllib.request,sys,tarfile,io; \
-d=urllib.request.urlopen(sys.argv[1]).read(); \
+ && python -c "import io,os,sys,tarfile,urllib.request; \
+tok=os.environ.get('TOK',''); \
+h={'Authorization':'Bearer '+tok,'Accept':'application/octet-stream'} if tok else {}; \
+r=urllib.request.Request(sys.argv[1], headers=h); \
+d=urllib.request.urlopen(r, timeout=120).read(); \
 tarfile.open(fileobj=io.BytesIO(d)).extractall('data/input')" "$PRAYER_DATA_URL" \
  && python -m prayer.extract --quiet \
  && python -m prayer.extract.text --quiet \

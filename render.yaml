@@ -4,10 +4,13 @@ services:
   - type: web
     name: word-and-whisper
     runtime: docker
-    # Free and Starter are both 512 MB. The runtime holds an onnxruntime
-    # session over a ~128 MB model plus the corpus and index, so start here and
-    # downgrade only once the `docker stats` line in CI shows real headroom.
-    plan: standard
+    # Measured on the real service: 73 MB at startup with the bm25 default,
+    # rising to ~321 MB once a hybrid request loads the ONNX session. That fits
+    # the 512 MB free instance with room to spare, so start free. Move up if
+    # the `docker stats` line in CI trends toward ~450 MB.
+    # Free instances also sleep after 15 minutes idle; the first request back
+    # reloads the corpus and can take 30-60s.
+    plan: free
     region: frankfurt
     branch: main
 

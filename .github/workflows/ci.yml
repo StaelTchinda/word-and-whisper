@@ -65,6 +65,7 @@ jobs:
       - uses: ./.github/actions/build-data
         with:
           data-url: ${{ secrets.PRAYER_DATA_URL }}
+          data-token: ${{ secrets.PRAYER_DATA_TOKEN }}
       - name: pytest — 179 tests, latency budgets excluded
         run: python -m pytest -q -m "not perf" --durations=10
 
@@ -82,6 +83,7 @@ jobs:
       - uses: ./.github/actions/build-data
         with:
           data-url: ${{ secrets.PRAYER_DATA_URL }}
+          data-token: ${{ secrets.PRAYER_DATA_TOKEN }}
       - name: pytest -m perf (advisory)
         id: perf
         run: |
@@ -113,6 +115,7 @@ jobs:
           file: deploy/Dockerfile
           build-args: |
             PRAYER_DATA_URL=${{ secrets.PRAYER_DATA_URL }}
+            PRAYER_DATA_TOKEN=${{ secrets.PRAYER_DATA_TOKEN }}
           load: true
           tags: prayer:ci
           cache-from: type=gha

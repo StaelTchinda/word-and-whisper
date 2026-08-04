@@ -2,6 +2,9 @@
 # of it from scratch; `make data` alone takes about a second.
 PY ?= venv/bin/python
 PRAYER_DATA_URL ?=
+# Optional bearer token, for a URL that needs auth — e.g. a release asset in a
+# private GitHub repo. Unset for a pre-signed URL, which carries its own auth.
+PRAYER_DATA_TOKEN ?=
 
 .PHONY: help install fetch data text index golden queries setup serve bench test clean distclean
 
@@ -17,10 +20,16 @@ fetch:  ## download the cleaned source markdown into data/input/
 	  echo "The source books are copyrighted and are not in this repository."; \
 	  echo "Point it at an archive of data/input/, e.g.:"; \
 	  echo "  make fetch PRAYER_DATA_URL=https://…/prayer-input.tar.gz"; \
+	  echo "Add PRAYER_DATA_TOKEN=… when the URL needs a bearer token."; \
 	  exit 1; \
 	fi
 	@mkdir -p data/input
-	@curl -fsSL "$(PRAYER_DATA_URL)" | tar -xz -C data/input
+	@if [ -n "$(PRAYER_DATA_TOKEN)" ]; then \
+	  curl -fsSL -H "Authorization: Bearer $(PRAYER_DATA_TOKEN)" \
+	       -H "Accept: application/octet-stream" "$(PRAYER_DATA_URL)"; \
+	else \
+	  curl -fsSL "$(PRAYER_DATA_URL)"; \
+	fi | tar -xz -C data/input
 	@echo "input: $$(ls data/input | tr '\n' ' ')"
 
 data:  ## build the datasets from data/input/ (stdlib only, ~1s)

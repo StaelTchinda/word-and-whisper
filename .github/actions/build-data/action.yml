@@ -9,6 +9,12 @@ inputs:
       URL of a tar.gz of data/input/. The source books are copyrighted and are
       not in this repository, so CI cannot build the datasets without it.
     required: true
+  data-token:
+    description: >-
+      Optional bearer token for data-url — needed when it points at a release
+      asset in a private repo. Leave empty for a pre-signed URL.
+    required: false
+    default: ''
   python-version:
     description: Matches deploy/Dockerfile's python:3.12-slim
     required: false
@@ -50,6 +56,7 @@ runs:
       shell: bash
       env:
         PRAYER_DATA_URL: ${{ inputs.data-url }}
+        PRAYER_DATA_TOKEN: ${{ inputs.data-token }}
       run: make fetch
 
     - name: Build datasets, text, index, queries and golden fixtures
