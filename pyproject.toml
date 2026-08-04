@@ -6,6 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "prayer"
 version = "0.1.0"
 description = "Suggests biblical prayers for a described situation, with a ready-to-speak prayer"
+license = "MIT"
+readme = "README.md"
 requires-python = ">=3.12"
 
 # Everything the service needs — and, deliberately, everything the dataset

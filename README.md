@@ -154,3 +154,16 @@ word bounds, movement completeness, no-scripture-outside-anchor and the
 imprecation policy simply by existing. `tests/test_contract.py` registers a
 retriever and composer from a test module and drives them end to end — that is
 the executable definition of the modularity requirement.
+
+## Licence
+
+The code in this repository is MIT licensed (see `LICENSE`).
+
+**The source books are not.** *All the Prayers in the Bible* (Jimmy Parks,
+© Faithlife 2021) and *All the Prayers of the Bible* (Herbert Lockyer,
+© Zondervan 1959) are under copyright and are not distributed here — neither the
+cleaned markdown nor the datasets built from them. `make fetch` pulls them from
+wherever you host your own copies. *The Prayers of the Bible* (Philip Watters,
+1883) is public domain.
+
+The World English Bible text used for passages is public domain.
