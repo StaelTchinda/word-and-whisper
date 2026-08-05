@@ -3,7 +3,7 @@
 PY ?= venv/bin/python
 PRAYER_DATA_URL ?=
 
-.PHONY: help install fetch data text index golden queries setup serve bench test clean distclean
+.PHONY: help install fetch check-url data text index golden queries setup serve bench test clean distclean
 
 help:
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sed 's/:.*## /\t/' | expand -t22
@@ -13,6 +13,9 @@ install:  ## install the package and its runtime dependencies
 
 fetch:  ## download the source markdown (.zip or .tar.gz) into data/input/
 	@$(PY) -m prayer.extract.fetch
+
+check-url:  ## verify PRAYER_DATA_URL serves the archive, before pushing
+	@$(PY) -m prayer.extract.fetch --check
 
 data:  ## build the datasets from data/input/ (stdlib only, ~1s)
 	$(PY) -m prayer.extract

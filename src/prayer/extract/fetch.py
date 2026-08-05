@@ -17,6 +17,7 @@ import io
 import os
 import sys
 import tarfile
+import tempfile
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -74,12 +75,61 @@ def extract(payload: bytes, dest: Path) -> list[str]:
                      "file itself rather than an HTML download page")
 
 
-def fetch(url: str, dest: Path, timeout: int = 120) -> list[str]:
-    """Fetch a .zip or .tar.gz archive and extract it into `dest`."""
+def download(url: str, timeout: int = 120) -> tuple[bytes, str, str]:
+    """Return (payload, final_url, content_type). Follows redirects."""
     req = urllib.request.Request(url, headers={"User-Agent": "word-and-whisper/0.1"})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
-        payload = resp.read()
+        return resp.read(), resp.geturl(), resp.headers.get("Content-Type", "")
+
+
+def fetch(url: str, dest: Path, timeout: int = 120) -> list[str]:
+    """Fetch a .zip or .tar.gz archive and extract it into `dest`."""
+    payload, _, _ = download(url, timeout)
     return extract(payload, dest)
+
+
+def check(url: str, timeout: int = 120) -> int:
+    """Report what a URL actually serves, without extracting anything.
+
+    Worth its own command because the failure it diagnoses — a share link that
+    serves its HTML viewer page rather than the file — otherwise only shows up
+    inside a CI run or a container build, minutes away from the person who can
+    fix it.
+    """
+    try:
+        payload, final_url, content_type = download(url, timeout)
+    except Exception as exc:                       # noqa: BLE001 - reported
+        print(f"FAILED: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"  status       200, {len(payload):,} bytes")
+    print(f"  content-type {content_type or '(none)'}")
+    if final_url != url:
+        print(f"  redirected   {final_url[:100]}")
+    print(f"  first bytes  {payload[:8]!r}")
+
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            names = extract(payload, Path(tmp))
+    except ValueError as exc:
+        print(f"\nNOT USABLE: {exc}", file=sys.stderr)
+        if payload[:1] == b"<":
+            print("\nThis is a web page, not the file. Share links usually need "
+                  "converting:\n"
+                  "  Google Drive  https://drive.google.com/uc?export=download&id=FILE_ID\n"
+                  "  Dropbox       end the link with ?dl=1 instead of ?dl=0\n"
+                  "  OneDrive      use the 'Embed'/direct link, not the share link",
+                  file=sys.stderr)
+        return 1
+
+    missing = {"parks2021", "lockyer1959", "watters1883"} - set(names)
+    print(f"  archive      OK, top level: {', '.join(names)}")
+    if missing:
+        print(f"\nNOT USABLE: archive is missing {', '.join(sorted(missing))}",
+              file=sys.stderr)
+        return 1
+    print("\nusable — make fetch will work with this URL")
+    return 0
 
 
 def main(argv=None) -> int:
@@ -87,6 +137,8 @@ def main(argv=None) -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("url", nargs="?", default=os.environ.get("PRAYER_DATA_URL", ""))
     ap.add_argument("--dest", type=Path, default=None)
+    ap.add_argument("--check", action="store_true",
+                    help="report what the URL serves; extract nothing")
     args = ap.parse_args(argv)
 
     if not args.url:
@@ -95,6 +147,10 @@ def main(argv=None) -> int:
               "Point it at a direct-download link to a .zip or .tar.gz of "
               "data/input/.", file=sys.stderr)
         return 1
+
+    if args.check:
+        print(f"checking {args.url[:80]}{'…' if len(args.url) > 80 else ''}")
+        return check(args.url)
 
     dest = args.dest
     if dest is None:

@@ -42,7 +42,14 @@ so `configs/base.yaml` stays the readable description of how the service
 behaves and `.env` carries per-machine overrides and the one secret.
 
 ```bash
-make fetch PRAYER_DATA_URL=https://example.com/prayer-input.tar.gz
+make check-url PRAYER_DATA_URL=https://example.com/prayer-input.zip
+```
+
+That reports what the URL actually serves and fails if it is a share page
+rather than the file — the one mistake worth catching before CI does. Then:
+
+```bash
+make fetch PRAYER_DATA_URL=https://example.com/prayer-input.zip
 ```
 
 ```bash

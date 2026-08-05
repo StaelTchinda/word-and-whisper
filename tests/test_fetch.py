@@ -11,7 +11,7 @@ import zipfile
 
 import pytest
 
-from prayer.extract.fetch import extract, fetch, main
+from prayer.extract.fetch import check, extract, fetch, main
 
 NAMES = ("parks2021/a.md", "lockyer1959/b.md")
 
@@ -59,17 +59,30 @@ def test_extract_rejects_something_that_is_neither(tmp_path):
         extract(b"<!doctype html><title>Download</title>", tmp_path)
 
 
+class _Resp(io.BytesIO):
+    """Enough of an http.client.HTTPResponse for download() to work with."""
+
+    headers = {"Content-Type": "application/octet-stream"}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def geturl(self):
+        return "https://example.invalid/final"
+
+
+def _serve(monkeypatch, payload: bytes):
+    monkeypatch.setattr(urllib.request.OpenerDirector, "open",
+                        lambda self, req, data=None, timeout=None: _Resp(payload))
+
+
 @pytest.fixture
 def served(monkeypatch):
     """Capture the request urllib would send, and reply with an archive."""
     seen = {}
-
-    class _Resp(io.BytesIO):
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
 
     def fake_open(self, req, data=None, timeout=None):
         seen["url"] = req.full_url
@@ -112,15 +125,28 @@ def test_main_reports_a_refusal(capsys, monkeypatch, tmp_path):
 def test_main_names_the_wrong_link_mistake(capsys, monkeypatch, tmp_path):
     """A share URL that serves its HTML download page is the likeliest mistake
     (Dropbox ?dl=0, a Drive interstitial)."""
-    class _Resp(io.BytesIO):
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-    monkeypatch.setattr(urllib.request.OpenerDirector, "open",
-                        lambda self, req, data=None, timeout=None: _Resp(b"<!doctype html>"))
+    _serve(monkeypatch, b"<!doctype html>")
     assert main(["https://example.invalid/x.zip", "--dest", str(tmp_path)]) == 1
     err = capsys.readouterr().err
     assert "neither a .zip nor a .tar.gz" in err
+
+
+def test_check_accepts_a_real_archive(capsys, monkeypatch):
+    _serve(monkeypatch, _zip(("parks2021/a.md", "lockyer1959/b.md",
+                              "watters1883/c.md")))
+    assert check("https://example.invalid/x.zip") == 0
+    assert "usable" in capsys.readouterr().out
+
+
+def test_check_rejects_a_share_page_and_says_how_to_fix_it(capsys, monkeypatch):
+    _serve(monkeypatch, b"<!DOCTYPE html><title>Sign in</title>")
+    assert check("https://example.invalid/share") == 1
+    err = capsys.readouterr().err
+    assert "not the file" in err
+    assert "?dl=1" in err
+
+
+def test_check_rejects_an_archive_missing_a_source(capsys, monkeypatch):
+    _serve(monkeypatch, _zip(("parks2021/a.md",)))
+    assert check("https://example.invalid/x.zip") == 1
+    assert "missing lockyer1959, watters1883" in capsys.readouterr().err
