@@ -47,7 +47,9 @@ runs:
         path: data/vendor/web
         key: ebible-eng-web-v1
 
-    # The Makefile defaults PY to venv/bin/python, which does not exist here.
+    # The Makefile defaults PY to venv/bin/python, which does not exist on a
+    # runner, so every target that invokes Python needs the override — `fetch`
+    # included, since it now runs prayer.extract.fetch rather than curl.
     - name: Install
       shell: bash
       run: make install PY=python
@@ -57,7 +59,7 @@ runs:
       env:
         PRAYER_DATA_URL: ${{ inputs.data-url }}
         PRAYER_DATA_TOKEN: ${{ inputs.data-token }}
-      run: make fetch
+      run: make fetch PY=python
 
     - name: Build datasets, text, index, queries and golden fixtures
       shell: bash
