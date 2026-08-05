@@ -14,9 +14,11 @@ services:
     region: frankfurt
     branch: main
 
-    # CI owns deployment: ci.yml deploys only after the suite passes. Leaving
-    # this on would let an untested commit go live the moment it lands.
-    autoDeploy: false
+    # Render deploys itself the moment a commit lands on main. Safe because
+    # main is a protected branch: only a PR can update it, and the PR can't
+    # merge until quick/test/docker pass — so nothing untested ever reaches
+    # the branch this watches. See the README's CI/CD section.
+    autoDeploy: true
 
     dockerfilePath: ./backend/deploy/Dockerfile
     dockerContext: ./backend
@@ -74,11 +76,9 @@ services:
     staticPublishPath: dist
     branch: main
 
-    # CI does not yet drive this deploy (unlike the Docker service, ci.yml has
-    # no job that triggers it) -- until that's added, deploy this one from the
-    # Render dashboard, or flip this to true if manual deploys are too easy to
-    # forget.
-    autoDeploy: false
+    # Same reasoning as the API service above: safe to auto-deploy because
+    # main only accepts commits that already passed CI via a required PR.
+    autoDeploy: true
 
     routes:
       # CHECK THIS: assumes the API service above lands at
