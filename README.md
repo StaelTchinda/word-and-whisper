@@ -33,6 +33,15 @@ python3 -m venv venv && make install
 ```
 
 ```bash
+cp .env.example .env      # then set PRAYER_DATA_URL
+```
+
+`.env.example` documents every variable; only `PRAYER_DATA_URL` is required.
+Precedence is **environment > `.env` > `configs/base.yaml` > field default**,
+so `configs/base.yaml` stays the readable description of how the service
+behaves and `.env` carries per-machine overrides and the one secret.
+
+```bash
 make fetch PRAYER_DATA_URL=https://example.com/prayer-input.tar.gz
 ```
 
