@@ -45,6 +45,12 @@ services:
       # host where you can swap the object behind the same name.
       - key: PRAYER_DATA_URL
         sync: false
+      # onnxruntime allocates per-thread arenas. Four threads on a free
+      # instance's fractional CPU buys nothing and costs memory, which is the
+      # scarce resource at 512 MB. configs/base.yaml says 4 for a laptop; this
+      # overrides it here (environment outranks the YAML).
+      - key: PRAYER_EMBEDDING_THREADS
+        value: "1"
       - key: PYTHONUNBUFFERED
         value: "1"
       - key: HF_HUB_DISABLE_TELEMETRY
