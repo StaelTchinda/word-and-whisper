@@ -8,6 +8,15 @@
 data/
 
 venv/
+
+# Local secrets. .env.example is the committed template; .env itself holds a
+# real PRAYER_DATA_URL and must never reach a public repo.
+.env
+.env.*
+!.env.example
+
+# Editor / agent working state, not project content.
+.claude/
 __pycache__/
 *.py[cod]
 *.egg-info/

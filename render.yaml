@@ -1,0 +1,57 @@
+# Render Blueprint. Must live at the repository root — Render's scanner only
+# looks for render.yaml there, on the default branch.
+services:
+  - type: web
+    name: word-and-whisper
+    runtime: docker
+    # Measured on the real service: 73 MB at startup with the bm25 default,
+    # rising to ~321 MB once a hybrid request loads the ONNX session. That fits
+    # the 512 MB free instance with room to spare, so start free. Move up if
+    # the `docker stats` line in CI trends toward ~450 MB.
+    # Free instances also sleep after 15 minutes idle; the first request back
+    # reloads the corpus and can take 30-60s.
+    plan: free
+    region: frankfurt
+    branch: main
+
+    # CI owns deployment: ci.yml deploys only after the suite passes. Leaving
+    # this on would let an untested commit go live the moment it lands.
+    autoDeploy: false
+
+    dockerfilePath: ./deploy/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    numInstances: 1
+
+    envVars:
+      # PRAYER_ROOT and PRAYER_HOST are already ENV in the Dockerfile; repeated
+      # so this file alone describes the deployment.
+      - key: PRAYER_ROOT
+        value: /app
+      - key: PRAYER_HOST
+        value: "0.0.0.0"
+      # Pinning PORT keeps the Dockerfile's hard-coded HEALTHCHECK
+      # (127.0.0.1:8000) truthful. api/__main__.py reads PORT first, so this is
+      # what uvicorn binds.
+      - key: PORT
+        value: "8000"
+      - key: PRAYER_PORT
+        value: "8000"
+      # A direct-download link to a .zip (or .tar.gz) of data/input/. The
+      # source books are copyrighted and are not in this repository. Set the
+      # value in the Render dashboard; Render forwards service env vars to
+      # `docker build` as build args, which fills the Dockerfile's
+      # ARG PRAYER_DATA_URL. Anyone with the link can download it, so prefer a
+      # host where you can swap the object behind the same name.
+      - key: PRAYER_DATA_URL
+        sync: false
+      # onnxruntime allocates per-thread arenas. Four threads on a free
+      # instance's fractional CPU buys nothing and costs memory, which is the
+      # scarce resource at 512 MB. configs/base.yaml says 4 for a laptop; this
+      # overrides it here (environment outranks the YAML).
+      - key: PRAYER_EMBEDDING_THREADS
+        value: "1"
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: HF_HUB_DISABLE_TELEMETRY
+        value: "1"

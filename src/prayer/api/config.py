@@ -10,7 +10,8 @@ from typing import Any, Optional
 
 import yaml
 from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (BaseSettings, PydanticBaseSettingsSource,
+                               SettingsConfigDict)
 
 from prayer import paths
 
@@ -18,7 +19,22 @@ CONFIG_PATH = paths.CONFIG_FILE
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="PRAYER_", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_prefix="PRAYER_",
+        extra="ignore",
+        # A local .env is a convenience for development; it is gitignored, and
+        # real deployments set the variables directly.
+        env_file=".env",
+        env_file_encoding="utf-8",
+    )
+
+    @classmethod
+    def settings_customise_sources(cls, settings_cls, init_settings,
+                                   env_settings, dotenv_settings,
+                                   file_secret_settings):
+        # Highest priority first.
+        return (init_settings, env_settings, dotenv_settings,
+                _YamlSource(settings_cls, _config_path), file_secret_settings)
 
     # paths
     # Points at one source directory. data/build/datasets/ now holds several
@@ -80,11 +96,40 @@ def _yaml_values(path: Path) -> dict[str, Any]:
     return flat
 
 
+class _YamlSource(PydanticBaseSettingsSource):
+    """configs/base.yaml as a settings source, ranked below the environment.
+
+    It has to be a source rather than init kwargs: pydantic-settings ranks init
+    kwargs *above* env vars, so passing the YAML that way made every key it
+    contains impossible to override — `PRAYER_RETRIEVER=hybrid` was silently
+    ignored, contradicting this module's own docstring.
+    """
+
+    def __init__(self, settings_cls, path: Path):
+        super().__init__(settings_cls)
+        self.path = path
+
+    def get_field_value(self, field, field_name):  # pragma: no cover - unused hook
+        return None, field_name, False
+
+    def __call__(self) -> dict[str, Any]:
+        return _yaml_values(self.path)
+
+
 _settings: Optional[Settings] = None
+_config_path: Path = CONFIG_PATH
 
 
 def get_settings(reload: bool = False, path: Path = CONFIG_PATH) -> Settings:
-    global _settings
+    """Resolve settings once, then cache.
+
+    Precedence, highest first: environment > .env > configs/base.yaml > field
+    default. So a deployment flips `PRAYER_COMPOSER=schema` without editing a
+    tracked file, and the checked-in YAML stays the thing a human reads to know
+    how the service behaves.
+    """
+    global _settings, _config_path
     if _settings is None or reload:
-        _settings = Settings(**_yaml_values(path))
+        _config_path = path
+        _settings = Settings()
     return _settings

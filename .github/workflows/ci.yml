@@ -1,0 +1,231 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Secrets are not exposed to pull requests from forks, and the `secrets`
+  # context cannot be read in a job-level `if:`. github.* can, so decide once
+  # here and let every data-dependent job key off it.
+  guard:
+    runs-on: ubuntu-latest
+    outputs:
+      trusted: ${{ steps.q.outputs.trusted }}
+    steps:
+      - id: q
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ] || \
+             [ "${{ github.event.pull_request.head.repo.full_name }}" = "${{ github.repository }}" ]; then
+            echo "trusted=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "trusted=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Fork PR — data-dependent jobs skipped (no PRAYER_DATA_URL)."
+          fi
+
+  # Runs for everyone, forks included. Needs no data and no secrets.
+  quick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: make install PY=python
+      - name: Byte-compile everything
+        run: python -m compileall -q src tests
+      # app.py builds the corpus in `lifespan`, not at import, so importing it
+      # is a real check that needs no data on disk.
+      - name: Import smoke
+        run: |
+          python -c "
+          import prayer.api.app, prayer.api.build.index, prayer.api.build.golden
+          import prayer.extract.text, prayer.extract.parks, prayer.bench.build_tier1
+          print('imports ok')"
+
+  test:
+    needs: guard
+    if: needs.guard.outputs.trusted == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/build-data
+        with:
+          data-url: ${{ secrets.PRAYER_DATA_URL }}
+      - name: pytest — 179 tests, latency budgets excluded
+        run: python -m pytest -q -m "not perf" --durations=10
+
+  # Never blocks a merge: the budgets are tuned for a quiet machine and shared
+  # runners are neither quiet nor consistent. `make test` locally applies no
+  # filter, so all 183 still run strict on your laptop.
+  perf:
+    needs: guard
+    if: needs.guard.outputs.trusted == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/build-data
+        with:
+          data-url: ${{ secrets.PRAYER_DATA_URL }}
+      - name: pytest -m perf (advisory)
+        id: perf
+        run: |
+          set -o pipefail
+          python -m pytest -q -m perf -rA 2>&1 | tee perf.log
+      - name: Surface the numbers in the run summary
+        if: always()
+        run: |
+          {
+            echo "### Latency budgets (advisory)"
+            echo '```'
+            grep -Ei 'p50|p95|passed|failed' perf.log | tail -20 || tail -20 perf.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  docker:
+    needs: guard
+    if: needs.guard.outputs.trusted == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the deploy image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          build-args: |
+            PRAYER_DATA_URL=${{ secrets.PRAYER_DATA_URL }}
+          load: true
+          tags: prayer:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Start the container on its own default port
+        run: docker run -d --name prayer -p 8000:8000 prayer:ci
+
+      # /health returns HTTP 200 even when status is "degraded" (app.py), so a
+      # status-code check would wave through an image with an empty corpus.
+      # Assert on the body.
+      - name: /health must report status=ok
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 60); do
+            if body=$(curl -fsS http://127.0.0.1:8000/health 2>/dev/null); then
+              [ "$(echo "$body" | jq -r .status)" = "ok" ] && break
+            fi
+            sleep 2
+          done
+          echo "$body"
+          echo "$body" | jq -e '.status == "ok" and .prayers > 0 and .passages > 0'
+
+      - name: /suggest must return a real suggestion
+        run: |
+          curl -fsS -X POST http://127.0.0.1:8000/suggest \
+            -H 'content-type: application/json' \
+            -d '{"situation":"I am anxious about my job and cannot sleep","k":3}' \
+          | jq -e '.abstained == false and (.suggestions | length) > 0'
+
+      # This number decides which Render plan you need; free/starter are 512 MB.
+      - name: Record resident memory
+        run: |
+          docker stats --no-stream --format '{{.Name}} {{.MemUsage}} {{.MemPerc}}' prayer \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # Render injects PORT and routes to it. Proves the fix in api/__main__.py.
+      - name: Must bind a platform-injected PORT
+        run: |
+          set -euo pipefail
+          docker rm -f prayer
+          docker run -d --name prayer10k -e PORT=10000 -p 10000:10000 prayer:ci
+          for _ in $(seq 1 60); do
+            curl -fsS http://127.0.0.1:10000/health >/dev/null 2>&1 && exit 0
+            sleep 2
+          done
+          echo "::error::container did not bind PORT=10000"
+          exit 1
+
+      - name: Container logs on failure
+        if: failure()
+        run: |
+          docker logs prayer 2>&1 | tail -100 || true
+          docker logs prayer10k 2>&1 | tail -100 || true
+
+  deploy:
+    needs: [quick, test, docker]   # deliberately not `perf` — advisory only
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment:
+      name: production
+      url: ${{ vars.RENDER_SERVICE_URL }}
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false    # never cancel a deploy mid-flight
+    steps:
+      - name: Trigger the Render deploy
+        id: dep
+        env:
+          KEY: ${{ secrets.RENDER_API_KEY }}
+          SVC: ${{ vars.RENDER_SERVICE_ID }}
+        run: |
+          set -euo pipefail
+          id=$(curl -fsS -X POST "https://api.render.com/v1/services/$SVC/deploys" \
+                -H "Authorization: Bearer $KEY" \
+                -H 'content-type: application/json' \
+                -d '{"clearCache":"do_not_clear"}' | jq -r .id)
+          [ -n "$id" ] && [ "$id" != "null" ] || { echo "::error::no deploy id returned"; exit 1; }
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          echo "::notice::Render deploy $id started"
+
+      - name: Wait for it to go live
+        env:
+          KEY: ${{ secrets.RENDER_API_KEY }}
+          SVC: ${{ vars.RENDER_SERVICE_ID }}
+          DEP: ${{ steps.dep.outputs.id }}
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 180); do            # 180 * 10s = 30 min
+            s=$(curl -fsS -H "Authorization: Bearer $KEY" -H 'accept: application/json' \
+                 "https://api.render.com/v1/services/$SVC/deploys/$DEP" | jq -r .status)
+            echo "status=$s"
+            case "$s" in
+              live) exit 0 ;;
+              build_failed|update_failed|pre_deploy_failed|canceled|deactivated)
+                echo "::error::Render deploy $DEP ended in $s"; exit 1 ;;
+            esac
+            sleep 10
+          done
+          echo "::error::timed out waiting for deploy $DEP"
+          exit 1
+
+      # Again: 200 is not enough, "degraded" is also 200.
+      - name: Post-deploy smoke
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 30); do
+            body=$(curl -fsS "${{ vars.RENDER_SERVICE_URL }}/health") && break || sleep 10
+          done
+          echo "$body"
+          echo "$body" | jq -e '.status == "ok" and .prayers > 0 and .passages > 0'
+          curl -fsS -X POST "${{ vars.RENDER_SERVICE_URL }}/suggest" \
+            -H 'content-type: application/json' \
+            -d '{"situation":"I am grieving a parent","k":3}' \
+          | jq -e '(.suggestions | length) > 0'

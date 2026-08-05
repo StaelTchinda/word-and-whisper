@@ -33,7 +33,23 @@ python3 -m venv venv && make install
 ```
 
 ```bash
-make fetch PRAYER_DATA_URL=https://example.com/prayer-input.tar.gz
+cp .env.example .env      # then set PRAYER_DATA_URL
+```
+
+`.env.example` documents every variable; only `PRAYER_DATA_URL` is required.
+Precedence is **environment > `.env` > `configs/base.yaml` > field default**,
+so `configs/base.yaml` stays the readable description of how the service
+behaves and `.env` carries per-machine overrides and the one secret.
+
+```bash
+make check-url PRAYER_DATA_URL=https://example.com/prayer-input.zip
+```
+
+That reports what the URL actually serves and fails if it is a share page
+rather than the file — the one mistake worth catching before CI does. Then:
+
+```bash
+make fetch PRAYER_DATA_URL=https://example.com/prayer-input.zip
 ```
 
 ```bash
@@ -141,6 +157,46 @@ From section 11. I have not guessed at any of them.
    redistributable; the archives are vendored under `data/vendor/web/`. Nothing
    under `data/` is committed, so this only matters if you later ship the text
    in an image or a release.
+
+## CI/CD
+
+`.github/workflows/ci.yml` runs on every push and PR:
+
+| Job | What it does | Blocks a merge |
+| --- | --- | --- |
+| `quick` | byte-compile + import smoke; needs no data or secrets, so it runs on fork PRs too | yes |
+| `test` | full build, then `pytest -m "not perf"` — 179 tests | yes |
+| `perf` | the 4 wall-clock latency tests; numbers land in the run summary | **no** (`continue-on-error`) |
+| `docker` | builds `deploy/Dockerfile`, starts the container, asserts `/health` reports `status: ok` and `/suggest` returns a suggestion, records resident memory | yes |
+| `deploy` | on `main` only, after the three above: triggers Render, polls until `live`, smoke-tests the public URL | — |
+
+The latency budgets are tuned for a quiet machine, so they are advisory in CI and
+strict locally: `make test` applies no marker filter and still runs all 183.
+
+CI cannot build the datasets from the repo alone — the source books are
+copyrighted and arrive via `PRAYER_DATA_URL`. That secret is unavailable to
+pull requests from forks, so `test`/`perf`/`docker`/`deploy` skip there and
+`quick` carries the signal.
+
+Deployment is Render (`render.yaml`, at the repo root because that is the only
+place Render looks). `autoDeploy` is **off**: CI owns deployment, which is what
+makes "tests before deploy" true rather than a coincidence of timing.
+`.github/workflows/deploy.yml` is the manual redeploy/rollback path — it takes a
+commit SHA, which a deploy hook cannot.
+
+### What you still have to set up
+
+| Where | Name | Kind |
+| --- | --- | --- |
+| GitHub repo secret | `PRAYER_DATA_URL` | credential-free direct-download link to a `.zip` (or `.tar.gz`) of `data/input/` |
+| GitHub environment `production` | `RENDER_API_KEY` | Render API key |
+| GitHub repo variable | `RENDER_SERVICE_ID` | `srv-…` |
+| GitHub repo variable | `RENDER_SERVICE_URL` | the public URL |
+| Render dashboard | `PRAYER_DATA_URL` | same value; `sync: false` in `render.yaml` |
+
+Measured footprint, which is why `render.yaml` asks for the free plan: **73 MB**
+at startup on the `bm25` default, **~321 MB** once a hybrid request loads the
+ONNX session — inside a 512 MB instance either way.
 
 ## Tests
 

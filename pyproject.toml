@@ -61,3 +61,7 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+addopts = "--strict-markers"
+markers = [
+    "perf: asserts a wall-clock latency budget; meaningful on a quiet machine, not on a shared CI runner",
+]

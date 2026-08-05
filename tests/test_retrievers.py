@@ -202,6 +202,7 @@ def test_hybrid_reports_agreement_as_a_reason(built, analyzer):
 
 # --- latency (M4 DoD: retrieval p95 < 50 ms) --------------------------------
 
+@pytest.mark.perf
 @pytest.mark.parametrize("name", RETRIEVERS)
 def test_retrieval_p95_under_50ms(built, analyzer, name):
     queries = [json.loads(line)["situation"]

@@ -37,16 +37,15 @@ from prayer import paths; download_model(paths.EMBEDDING_MODEL)"
 # archive of data/input/. Without it the build stops here rather than producing
 # an image that would fail at runtime.
 ARG PRAYER_DATA_URL
-RUN test -n "$PRAYER_DATA_URL" || \
-      (echo "PRAYER_DATA_URL build-arg is required" && exit 1) \
- && mkdir -p data/input \
- && python -c "import urllib.request,sys,tarfile,io; \
-d=urllib.request.urlopen(sys.argv[1]).read(); \
-tarfile.open(fileobj=io.BytesIO(d)).extractall('data/input')" "$PRAYER_DATA_URL" \
+ENV PRAYER_DATA_URL=$PRAYER_DATA_URL
+RUN python -m prayer.extract.fetch \
  && python -m prayer.extract --quiet \
  && python -m prayer.extract.text --quiet \
  && python -m prayer.api.build.index \
  && rm -rf data/input data/vendor/web
+# The URL is still a thing worth not leaving lying around in the running
+# container's environment, even without a token beside it.
+ENV PRAYER_DATA_URL=""
 
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=20s \

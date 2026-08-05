@@ -508,12 +508,23 @@ def load_records(dataset_dir: Path) -> list[dict]:
 
 
 def download(dest_dir: Path) -> None:
+    import shutil
     import urllib.request
+
+    # ebible.org 403s the default "Python-urllib/3.x" agent, so urlretrieve
+    # fails outright. Any identifiable agent is accepted.
+    headers = {"User-Agent": "word-and-whisper/0.1 (+https://github.com/StaelTchinda/word-and-whisper)"}
     dest_dir.mkdir(parents=True, exist_ok=True)
     for name in ("eng-web_usfx.zip", "eng-web_vpl.zip"):
         url = f"{SOURCE_URL}{name}"
         print(f"fetching {url}")
-        urllib.request.urlretrieve(url, dest_dir / name)
+        req = urllib.request.Request(url, headers=headers)
+        tmp = dest_dir / f".{name}.part"
+        with urllib.request.urlopen(req, timeout=120) as resp, tmp.open("wb") as fh:
+            shutil.copyfileobj(resp, fh)
+        # Rename only once the body is complete, so an interrupted fetch can
+        # never leave a truncated archive that later looks cached.
+        tmp.replace(dest_dir / name)
 
 
 def main(argv=None) -> int:
@@ -529,11 +540,14 @@ def main(argv=None) -> int:
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args(argv)
 
-    if args.download:
+    # A clean checkout has no archives. Fetching them here rather than only under
+    # --download is what lets `make setup` and the image build work from nothing;
+    # --download keeps its "refresh even if already present" meaning.
+    if args.download or not args.usfx.exists():
         download(args.usfx.parent)
 
     if not args.usfx.exists():
-        print(f"missing {args.usfx}; run with --download", file=sys.stderr)
+        print(f"missing {args.usfx}; no network and nothing cached", file=sys.stderr)
         return 1
 
     index, supers = parse_usfx(args.usfx)
