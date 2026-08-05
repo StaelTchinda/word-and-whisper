@@ -171,64 +171,8 @@ jobs:
           docker logs prayer 2>&1 | tail -100 || true
           docker logs prayer10k 2>&1 | tail -100 || true
 
-  deploy:
-    needs: [quick, test, docker]   # deliberately not `perf` — advisory only
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    environment:
-      name: production
-      url: ${{ vars.RENDER_SERVICE_URL }}
-    concurrency:
-      group: deploy-production
-      cancel-in-progress: false    # never cancel a deploy mid-flight
-    steps:
-      - name: Trigger the Render deploy
-        id: dep
-        env:
-          KEY: ${{ secrets.RENDER_API_KEY }}
-          SVC: ${{ vars.RENDER_SERVICE_ID }}
-        run: |
-          set -euo pipefail
-          id=$(curl -fsS -X POST "https://api.render.com/v1/services/$SVC/deploys" \
-                -H "Authorization: Bearer $KEY" \
-                -H 'content-type: application/json' \
-                -d '{"clearCache":"do_not_clear"}' | jq -r .id)
-          [ -n "$id" ] && [ "$id" != "null" ] || { echo "::error::no deploy id returned"; exit 1; }
-          echo "id=$id" >> "$GITHUB_OUTPUT"
-          echo "::notice::Render deploy $id started"
-
-      - name: Wait for it to go live
-        env:
-          KEY: ${{ secrets.RENDER_API_KEY }}
-          SVC: ${{ vars.RENDER_SERVICE_ID }}
-          DEP: ${{ steps.dep.outputs.id }}
-        run: |
-          set -euo pipefail
-          for _ in $(seq 1 180); do            # 180 * 10s = 30 min
-            s=$(curl -fsS -H "Authorization: Bearer $KEY" -H 'accept: application/json' \
-                 "https://api.render.com/v1/services/$SVC/deploys/$DEP" | jq -r .status)
-            echo "status=$s"
-            case "$s" in
-              live) exit 0 ;;
-              build_failed|update_failed|pre_deploy_failed|canceled|deactivated)
-                echo "::error::Render deploy $DEP ended in $s"; exit 1 ;;
-            esac
-            sleep 10
-          done
-          echo "::error::timed out waiting for deploy $DEP"
-          exit 1
-
-      # Again: 200 is not enough, "degraded" is also 200.
-      - name: Post-deploy smoke
-        run: |
-          set -euo pipefail
-          for _ in $(seq 1 30); do
-            body=$(curl -fsS "${{ vars.RENDER_SERVICE_URL }}/health") && break || sleep 10
-          done
-          echo "$body"
-          echo "$body" | jq -e '.status == "ok" and .prayers > 0 and .passages > 0'
-          curl -fsS -X POST "${{ vars.RENDER_SERVICE_URL }}/suggest" \
-            -H 'content-type: application/json' \
-            -d '{"situation":"I am grieving a parent","k":3}' \
-          | jq -e '(.suggestions | length) > 0'
+  # No deploy job: both Render services have autoDeploy: true and deploy
+  # themselves the moment a commit lands on main. Safety comes from branch
+  # protection instead of a CI-triggered deploy — main requires a PR with
+  # quick/test/docker passing, so nothing untested can reach the branch
+  # Render is watching. See render.yaml and the README's CI/CD section.
