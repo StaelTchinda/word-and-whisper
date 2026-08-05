@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     # Points at one source directory. data/build/datasets/ now holds several
     # (sources/parks2021, sources/lockyer1959) plus links/.
     dataset_dir: Path = paths.DATASETS / "sources/parks2021"
+    # All three source directories, for the read-only /sources browse+search
+    # surface (prayer.api.sources) -- independent of dataset_dir above, which
+    # stays parks2021-only and feeds only Corpus/{suggest,prayers/{id}}.
+    sources_dir: Path = paths.DATASETS / "sources"
     text_dir: Path = paths.TEXT
     policy_dir: Path = paths.POLICY
     phrases_dir: Path = paths.PHRASES

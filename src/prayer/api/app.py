@@ -19,6 +19,9 @@ from prayer.api.models import (ComponentInfo, ConfigResponse, HealthResponse,
                         LabelBlock, PrayerDetail, ReferenceBlock,
                         SuggestRequest, SuggestResponse)
 from prayer.api.pipeline import Pipeline
+from prayer.api.sources import load_sources
+from prayer.api.sources import router as sources_router
+from prayer.api.sources import set_stores
 
 log = logging.getLogger("prayer.api")
 
@@ -58,6 +61,7 @@ async def lifespan(app: FastAPI):
     except Exception as exc:  # startup must report, not crash silently
         _load_error = f"{type(exc).__name__}: {exc}"
         log.error("startup failed: %s", _load_error)
+    set_stores(load_sources(settings.sources_dir))
     yield
 
 
@@ -69,6 +73,7 @@ app = FastAPI(
                 "offline; scripture is never paraphrased.",
     lifespan=lifespan,
 )
+app.include_router(sources_router)
 
 
 @app.exception_handler(ValueError)
