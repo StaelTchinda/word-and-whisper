@@ -61,7 +61,7 @@ async def lifespan(app: FastAPI):
     except Exception as exc:  # startup must report, not crash silently
         _load_error = f"{type(exc).__name__}: {exc}"
         log.error("startup failed: %s", _load_error)
-    set_stores(load_sources(settings.sources_dir))
+    set_stores(load_sources(settings.sources_dir, settings.include_copyrighted_text))
     yield
 
 

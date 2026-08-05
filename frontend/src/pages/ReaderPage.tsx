@@ -31,7 +31,10 @@ export default function ReaderPage() {
   })
 
   const item = itemQuery.data
-  const needsCitations = item?.source_id === 'watters1883' && item.text === null
+  // Needed whenever the item has no single quotable text (to enumerate its
+  // sources) and also when it does (to thread each citation's notes/see_also
+  // onto the passage -- see WattersBody).
+  const needsCitations = item?.source_id === 'watters1883'
   const citationsQuery = useQuery({
     queryKey: ['citations', itemId],
     queryFn: () => getWattersCitations(itemId!),
@@ -74,7 +77,10 @@ export default function ReaderPage() {
         ) : (
           <>
             <h1>{item.title}</h1>
-            <div className="ref">{item.primary_ref ?? item.refs[0]?.raw ?? ''}</div>
+            <div className="ref">
+              {item.primary_ref ?? item.refs[0]?.raw ?? ''}
+              {item.source_id === 'lockyer1959' && item.page && ` · p. ${item.page}`}
+            </div>
           </>
         )}
       </div>

@@ -77,6 +77,26 @@ export interface LockyerScriptureQuote {
   translation: 'KJV'
 }
 
+export interface LockyerOutlinePoint {
+  n: number
+  text: string
+}
+
+export interface LockyerPoem {
+  position: number
+  text: string
+  lines: number
+  attribution: string | null
+}
+
+// In copyright (c. 1959 Zondervan) -- null/empty unless the backend was
+// started with PRAYER_INCLUDE_COPYRIGHTED_TEXT=true. See docs/datasets.md.
+export interface LockyerExposition {
+  paragraphs: string[]
+  word_count: number
+  outline: LockyerOutlinePoint[]
+}
+
 export interface LockyerItemDetail {
   source_id: 'lockyer1959'
   id: string
@@ -94,6 +114,31 @@ export interface LockyerItemDetail {
   has_exposition: boolean
   has_poetry: boolean
   exposition_paragraph_count: number
+  exposition: LockyerExposition | null
+  poetry: LockyerPoem[]
+  application_sentences: string[]
+  page: number | null
+}
+
+// One Bible book's introduction (all 66, incl. the 22 with no recorded
+// prayers -- for those this is the only content Lockyer gives). `intro`
+// follows the same copyright gating as LockyerItemDetail.exposition.
+export interface LockyerBookSection {
+  id: string
+  source_id: 'lockyer1959'
+  book: string | null
+  book_section: string
+  canon_section: CanonSection
+  has_prayers: boolean
+  n_prayer_entries: number
+  has_intro: boolean
+  intro_word_count: number
+  intro: LockyerExposition | null
+  poetry: LockyerPoem[]
+}
+
+export interface LockyerBookSectionsResponse {
+  items: LockyerBookSection[]
 }
 
 export interface WattersTopicTag {
@@ -134,6 +179,11 @@ export interface WattersCitation {
   translation: 'KJV'
   text_source: string
   page: number | null
+  // Public domain, never gated: body_prose that continued on from this
+  // citation in the source, and the "see also" target of any cross-reference
+  // drawn from this citation's own back-reference.
+  notes: string[]
+  see_also: string | null
 }
 
 export interface CitationsResponse {
@@ -141,16 +191,53 @@ export interface CitationsResponse {
   items: WattersCitation[]
 }
 
+export interface WattersFrontMatter {
+  id: string
+  headings: string[]
+  paragraphs: string[]
+  word_count: number
+}
+
+export interface WattersBackMatter {
+  id: string
+  content_type: string
+  headings: string[]
+  paragraphs: string[]
+  note: string
+}
+
+export interface WattersEditorialNote {
+  id: string
+  kind: 'page_marker' | 'editorial'
+  page: number | null
+  text: string
+}
+
+export interface WattersCrossReference {
+  id: string
+  kind: string
+  from_chapter_n: number
+  from_topic_path: string[]
+  to_topic_raw: string | null
+  from_citation_id: string | null
+}
+
 export interface TocItem {
   id: string
   title: string | null
   ref_display: string
+  page: number | null
 }
 
 export interface TocSubsection {
   id: string
   label: string
   items: TocItem[]
+  // Watters nests chapter -> topic -> subtopic; Parks/Lockyer never populate this.
+  children: TocSubsection[]
+  // Set only for a Lockyer book with no recorded prayers: `items` is empty,
+  // but the book still has an introduction worth reading.
+  book_section_id: string | null
 }
 
 export interface TocSection {

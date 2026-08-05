@@ -38,3 +38,9 @@ llm:
 ops:
   log_situations: false
   rate_limit_per_minute: 60
+
+sources:
+  # Lockyer's exposition/poetry/outline are in-copyright (c. 1959 Zondervan).
+  # Off by default; fine to flip on for personal, local use, but settle the
+  # rights question before deploying with this on. See docs/datasets.md.
+  include_copyrighted_text: false

@@ -28,7 +28,7 @@ def corpus(settings):
 @pytest.fixture(scope="session")
 def sources_store(settings):
     from prayer.api.sources import load_sources
-    return load_sources(settings.sources_dir)
+    return load_sources(settings.sources_dir, settings.include_copyrighted_text)
 
 
 @pytest.fixture(scope="session")

@@ -245,6 +245,17 @@ button {
   color: var(--text-muted);
 }
 
+.toc-matter-links {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.5rem;
+  font-size: 0.88rem;
+}
+
+.toc-matter-links a {
+  color: var(--accent);
+}
+
 .toc {
   display: flex;
   flex-direction: column;
@@ -343,6 +354,17 @@ button {
   white-space: nowrap;
 }
 
+.toc-empty-section {
+  padding: 0 0 0.4rem 1.1rem;
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
+
+.toc-empty-section a {
+  color: var(--accent);
+}
+
 /* --- reader -------------------------------------------------------------- */
 
 .reader {
@@ -438,6 +460,44 @@ button {
   font-size: 0.82rem;
   color: var(--text-muted);
   margin-bottom: 0.25rem;
+}
+
+.exposition {
+  margin: 0.5rem 0 1.5rem;
+}
+
+.outline {
+  font-family: var(--sans);
+  font-size: 1rem;
+  color: var(--text-muted);
+  padding-left: 1.4rem;
+}
+
+.quote.poem .quote-text {
+  font-style: italic;
+}
+
+.citation-notes {
+  margin: 0.4rem 0 0.9rem;
+}
+
+.citation-notes .note {
+  font-family: var(--sans);
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  font-style: italic;
+  margin: 0.3rem 0;
+}
+
+.citation-notes .see-also {
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  color: var(--accent-strong);
+  margin: 0.3rem 0;
+}
+
+.book-section-page .reader-body {
+  margin-top: 1rem;
 }
 
 .reader-nav {

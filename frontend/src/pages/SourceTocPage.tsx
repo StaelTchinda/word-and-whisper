@@ -45,6 +45,12 @@ export default function SourceTocPage() {
       <div className="toc-header">
         <h1>{title}</h1>
         {byline && <div className="byline">{byline}</div>}
+        {sourceId === 'watters1883' && (
+          <div className="toc-matter-links">
+            <Link to="/sources/watters1883/front-matter">Front matter</Link>
+            <Link to="/sources/watters1883/back-matter">Back matter</Link>
+          </div>
+        )}
       </div>
       <TocTree sourceId={sourceId!} toc={toc} />
     </div>

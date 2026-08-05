@@ -82,6 +82,14 @@ class Settings(BaseSettings):
     log_situations: bool = False  # situations are sensitive; log hashes instead
     rate_limit_per_minute: int = 60
 
+    # /sources browse+search (prayer.api.sources). Lockyer's exposition, poetry
+    # and outline are protected expression still in copyright (c. 1959
+    # Zondervan) -- see docs/datasets.md licensing section. Off by default so
+    # the API never serves or republishes them. Personal, local use is fine;
+    # settle the rights question before turning this on for a public
+    # deployment.
+    include_copyrighted_text: bool = False
+
 
 def _yaml_values(path: Path) -> dict[str, Any]:
     if not path.exists():

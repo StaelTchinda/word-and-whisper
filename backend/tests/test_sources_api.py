@@ -33,18 +33,25 @@ def test_unknown_source_404s(client):
     assert client.get("/sources/nope/items/x").status_code == 404
 
 
-# --- redaction (F1): the whole reason this is a separate, allowlisted model set --
+# --- redaction (F1): copyright gating on lockyer1959's own prose ------------
+#
+# `exposition`/`poetry`/`application_sentences` are in copyright (c. 1959
+# Zondervan, see docs/datasets.md). Off by default (PRAYER_INCLUDE_COPYRIGHTED_TEXT
+# unset); populated only when a deployment opts in. Never a `q` search match
+# either way -- see `_lockyer_blob` in prayer/api/sources.py.
 
-def test_lockyer_exposition_and_poetry_never_served(settings):
-    """lockyer1959's exposition/poetry/derived fields are in copyright
-    (c. 1959 Zondervan, see docs/datasets.md) and must never leave the API,
-    either in the detail response or as a `q` search match."""
-    from fastapi.testclient import TestClient
-    from prayer.api.app import app
-
+def _lockyer_first_entry_raw(settings) -> dict:
     raw_path = settings.sources_dir / "lockyer1959" / "entries.jsonl"
     raw = json.loads(raw_path.read_text().splitlines()[0])
     assert raw["id"] == "lockyer1959.0001"
+    return raw
+
+
+def test_lockyer_exposition_and_poetry_gated_off_by_default(settings):
+    from fastapi.testclient import TestClient
+    from prayer.api.app import app
+
+    raw = _lockyer_first_entry_raw(settings)
     exposition_sentence = raw["exposition"]["paragraphs"][0]
     poetry_line = raw["poetry"][0]["text"]
     application_sentence = raw["derived"]["application_sentences"][0]
@@ -55,15 +62,49 @@ def test_lockyer_exposition_and_poetry_never_served(settings):
         assert exposition_sentence not in serialized
         assert poetry_line not in serialized
         assert application_sentence not in serialized
-        assert "exposition" not in body
-        assert "poetry" not in body
-        assert "derived" not in body
+        assert body["exposition"] is None
+        assert body["poetry"] == []
+        assert body["application_sentences"] == []
 
         # a substring unique to the exposition must not be a `q` hit either
         needle = exposition_sentence[:40]
         hits = c.get("/sources/lockyer1959/items",
                      params={"q": needle, "limit": 100}).json()
         assert not any(item["id"] == "lockyer1959.0001" for item in hits["items"])
+
+
+def test_lockyer_exposition_and_poetry_served_when_opted_in(monkeypatch, settings):
+    """`PRAYER_INCLUDE_COPYRIGHTED_TEXT=true` is the explicit, human-owned
+    opt-in for personal/local use (see .env.example) -- with it set, the same
+    in-copyright prose the previous test proves is withheld by default must
+    actually come through."""
+    from fastapi.testclient import TestClient
+    from prayer.api.app import app
+    from prayer.api.config import get_settings
+
+    raw = _lockyer_first_entry_raw(settings)
+    exposition_sentence = raw["exposition"]["paragraphs"][0]
+    poetry_line = raw["poetry"][0]["text"]
+    application_sentence = raw["derived"]["application_sentences"][0]
+
+    monkeypatch.setenv("PRAYER_INCLUDE_COPYRIGHTED_TEXT", "true")
+    get_settings(reload=True)
+    try:
+        with TestClient(app) as c:
+            body = c.get("/sources/lockyer1959/items/lockyer1959.0001").json()
+            assert body["exposition"]["paragraphs"][0] == exposition_sentence
+            assert body["poetry"][0]["text"] == poetry_line
+            assert application_sentence in body["application_sentences"]
+
+            # still never a `q` search match -- the allowlist gates search
+            # independently of what the detail response happens to include
+            needle = exposition_sentence[:40]
+            hits = c.get("/sources/lockyer1959/items",
+                         params={"q": needle, "limit": 100}).json()
+            assert not any(item["id"] == "lockyer1959.0001" for item in hits["items"])
+    finally:
+        monkeypatch.delenv("PRAYER_INCLUDE_COPYRIGHTED_TEXT", raising=False)
+        get_settings(reload=True)
 
 
 def test_lockyer_detail_key_set_is_the_declared_allowlist(client):
@@ -220,28 +261,95 @@ def test_lockyer_toc_groups_by_book_section(client):
     assert len(ids) == len(set(ids)) == 347
 
 
-def test_watters_toc_is_chapters_not_canon(client):
+def test_lockyer_toc_includes_books_with_no_recorded_prayers(client):
+    """Leviticus has no recorded prayers -- Lockyer's introduction to it is
+    the only content the book gives, and it must still appear in the TOC
+    (empty, but present) rather than silently vanishing. See
+    prayer.api.sources._build_toc_by_book's `empty_sections`."""
+    body = client.get("/sources/lockyer1959/toc").json()
+    leviticus = next((sub for s in body["sections"] for sub in s["subsections"]
+                      if sub["id"] == "Leviticus"), None)
+    assert leviticus is not None, "Leviticus dropped out of the lockyer1959 TOC"
+    assert leviticus["items"] == []
+    assert leviticus["book_section_id"]
+
+    detail = client.get(
+        f"/sources/lockyer1959/book-sections/{leviticus['book_section_id']}").json()
+    assert detail["has_prayers"] is False
+    assert detail["book_section"] == "Leviticus"
+
+
+def test_watters_toc_nests_chapter_then_topic_then_subtopic(client):
     """Watters' chapters ("Who Prayed", "Duty of Prayer", ...) are topical and
     cut across canon/Bible book, so the toc has one flat run of chapters
-    rather than an OT/DC/NT split -- see prayer.api.sources._build_toc_watters."""
+    rather than an OT/DC/NT split, each chapter nesting its own topic/subtopic
+    outline -- see prayer.api.sources._build_toc_watters."""
     body = client.get("/sources/watters1883/toc").json()
     assert body["source_id"] == "watters1883"
     assert [s["id"] for s in body["sections"]] == ["chapters"]
 
-    subsections = body["sections"][0]["subsections"]
-    chapter_ns = [int(sub["id"]) for sub in subsections]
+    chapters = body["sections"][0]["subsections"]
+    chapter_ns = [int(sub["id"]) for sub in chapters]
     assert chapter_ns == sorted(chapter_ns)
     assert chapter_ns[0] == 1
 
-    first = subsections[0]
+    first = chapters[0]
     assert first["label"] == "I. Who Prayed"
-    assert first["items"]
-    assert all(i["ref_display"] and i["title"] is None for i in first["items"])
+    assert first["items"] == []  # a chapter holds topics, not passages, directly
+    assert first["children"], "chapter I carries no topics"
 
-    # a passage cited from more than one chapter of the original book is
+    topic = first["children"][0]
+    assert topic["label"]
+    # a topic either lists passages directly, or nests subtopics that do
+    assert topic["items"] or topic["children"]
+    if topic["children"]:
+        subtopic = topic["children"][0]
+        assert subtopic["items"]
+        assert all(i["ref_display"] and i["title"] is None for i in subtopic["items"])
+
+    # a passage cited under more than one topic in the original book is
     # listed under each of them
-    by_item = {}
-    for sub in subsections:
-        for item in sub["items"]:
-            by_item.setdefault(item["id"], set()).add(sub["id"])
-    assert any(len(chs) > 1 for chs in by_item.values())
+    by_item: dict[str, set] = {}
+    for chapter in chapters:
+        for topic in chapter["children"]:
+            for item in topic["items"]:
+                by_item.setdefault(item["id"], set()).add(topic["id"])
+            for sub in topic["children"]:
+                for item in sub["items"]:
+                    by_item.setdefault(item["id"], set()).add(sub["id"])
+    assert any(len(paths) > 1 for paths in by_item.values())
+
+
+# --- watters1883: the rest of the book (public domain, no gating) ---------
+
+def test_watters_front_and_back_matter(client):
+    front = client.get("/sources/watters1883/front-matter").json()
+    assert front["paragraphs"]
+    back = client.get("/sources/watters1883/back-matter").json()
+    assert back["paragraphs"] or back["headings"]
+
+
+def test_watters_editorial_notes_include_page_markers(client):
+    notes = client.get("/sources/watters1883/editorial-notes",
+                       params={"kind": "page_marker"}).json()
+    assert notes
+    assert all(n["kind"] == "page_marker" and n["page"] for n in notes)
+
+
+def test_watters_citation_carries_inline_notes_and_see_also(client):
+    """`body_prose.jsonl` entries that continue on from a citation, and
+    cross-reference targets drawn from a citation's own back-reference, are
+    threaded onto that citation rather than left as disconnected lists."""
+    found_note = found_see_also = False
+    for offset in range(0, 500, 100):
+        page = client.get("/sources/watters1883/items",
+                          params={"limit": 100, "offset": offset}).json()
+        for summary in page["items"]:
+            citations = client.get(
+                f"/sources/watters1883/items/{summary['id']}/citations").json()["items"]
+            found_note = found_note or any(c["notes"] for c in citations)
+            found_see_also = found_see_also or any(c["see_also"] for c in citations)
+        if found_note and found_see_also:
+            break
+    assert found_note, "no citation carried an attached note"
+    assert found_see_also, "no citation carried a see_also target"

@@ -93,3 +93,16 @@ Only one of the three is public domain.
 The first two are fine for personal analysis and derived work; settle the rights
 question before redistributing them or shipping a product that surfaces the
 exposition. Watters carries no such restriction.
+
+### Reading Lockyer's exposition/poetry in the `/sources` API and reader UI
+
+`entries.jsonl` and `book_sections.jsonl` always carry the full `exposition`,
+`poetry`, `outline` and `derived.application_sentences` fields — nothing is
+lost at extraction. `prayer.api.sources` withholds them from the servable
+`LockyerItemDetail`/`LockyerBookSection` models by default; set
+`PRAYER_INCLUDE_COPYRIGHTED_TEXT=true` (see `.env.example`) to have the API
+serve them and the reader UI render them instead of a "not reproduced here"
+notice. This is fine for personal, local use; leave it off (the default) on
+any deployment you don't fully control the audience of, per the licensing
+note above. It never affects `q` search, which stays restricted to the
+title/quote allowlist regardless.

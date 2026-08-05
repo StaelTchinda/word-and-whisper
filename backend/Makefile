@@ -38,6 +38,10 @@ setup: data text index queries golden  ## build everything data/input/ implies
 serve:  ## run the API
 	$(PY) -m prayer.api
 
+kill-serve:  ## kill the API
+	@pids="$$(ps aux | grep 'python -m prayer.api' | grep -v grep | awk '{print $$2}')"; \
+	if [ -n "$$pids" ]; then kill -9 $$pids; else echo "no prayer.api process running"; fi
+
 bench:  ## run the evaluation matrix
 	$(PY) -m prayer.bench.run
 
