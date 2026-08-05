@@ -1,17 +1,17 @@
 name: build-data
 description: >-
-  Install the package and build every artifact under data/ that the test suite
-  needs. Shared by the `test` and `perf` jobs.
+  Install the package and build every artifact under backend/data/ that the
+  test suite needs. Shared by the `test` and `perf` jobs.
 
 inputs:
   data-url:
     description: >-
-      Direct-download link to a .zip or .tar.gz of data/input/, needing no
-      credentials. The source books are copyrighted and are not in this
-      repository, so CI cannot build the datasets without it.
+      Direct-download link to a .zip or .tar.gz of backend/data/input/,
+      needing no credentials. The source books are copyrighted and are not in
+      this repository, so CI cannot build the datasets without it.
     required: true
   python-version:
-    description: Matches deploy/Dockerfile's python:3.12-slim
+    description: Matches backend/deploy/Dockerfile's python:3.12-slim
     required: false
     default: '3.12'
 
@@ -22,7 +22,7 @@ runs:
       with:
         python-version: ${{ inputs.python-version }}
         cache: pip
-        cache-dependency-path: pyproject.toml
+        cache-dependency-path: backend/pyproject.toml
 
     # ~128 MB. download_model() pulls into the HF hub cache and copies out of
     # it, so caching the hub directory is enough. index.py declares HF_REPO and
@@ -31,7 +31,7 @@ runs:
       uses: actions/cache@v4
       with:
         path: ~/.cache/huggingface/hub
-        key: hf-${{ runner.os }}-bge-small-en-v1.5-${{ hashFiles('src/prayer/api/build/index.py') }}
+        key: hf-${{ runner.os }}-bge-small-en-v1.5-${{ hashFiles('backend/src/prayer/api/build/index.py') }}
         restore-keys: hf-${{ runner.os }}-bge-small-en-v1.5-
 
     # 8.2 MB. ebible.org updates in place and offers no content hash, so bump
@@ -39,7 +39,7 @@ runs:
     - name: Cache the WEB scripture archives
       uses: actions/cache@v4
       with:
-        path: data/vendor/web
+        path: backend/data/vendor/web
         key: ebible-eng-web-v1
 
     # The Makefile defaults PY to venv/bin/python, which does not exist on a
@@ -69,15 +69,15 @@ runs:
       run: |
         set -euo pipefail
         missing=0
-        for f in data/build/datasets/sources/parks2021/prayers.jsonl \
-                 data/build/text/web.jsonl \
-                 data/build/bench/queries/tier1.jsonl \
-                 data/build/fixtures/golden_compositions.json \
-                 data/vendor/models/bge-small-en-v1.5/model.onnx; do
+        for f in backend/data/build/datasets/sources/parks2021/prayers.jsonl \
+                 backend/data/build/text/web.jsonl \
+                 backend/data/build/bench/queries/tier1.jsonl \
+                 backend/data/build/fixtures/golden_compositions.json \
+                 backend/data/vendor/models/bge-small-en-v1.5/model.onnx; do
           if [ ! -s "$f" ]; then echo "::error::build produced no $f"; missing=1; fi
         done
-        if ! compgen -G 'data/build/index/*.npz' >/dev/null; then
-          echo "::error::build produced no data/build/index/*.npz"; missing=1
+        if ! compgen -G 'backend/data/build/index/*.npz' >/dev/null; then
+          echo "::error::build produced no backend/data/build/index/*.npz"; missing=1
         fi
         [ "$missing" -eq 0 ] || exit 1
         echo "all build artifacts present"

@@ -5,8 +5,12 @@ and, for each, **a ready-to-speak prayer** — first-person words to say aloud n
 
 Runs fully offline. Scripture is never paraphrased.
 
-Specification: [docs/PRODUCT_BOOK.md](docs/PRODUCT_BOOK.md). Everything below
-follows it; section references point back to it.
+Specification: [backend/docs/PRODUCT_BOOK.md](backend/docs/PRODUCT_BOOK.md).
+Everything below follows it; section references point back to it.
+
+The repo is two self-contained projects: [`backend/`](backend/) (this API)
+and [`frontend/`](frontend/) (a read-only web reader over the three source
+books — see [Web UI](#web-ui) below).
 
 ## Status
 
@@ -19,16 +23,20 @@ follows it; section references point back to it.
 | M4 R2 dense + R3 hybrid | done |
 | M5–M9 | not started — **M5 is blocked on an open decision** (see below) |
 
-183 tests pass. `data/build/bench/results/m4-matrix/report.md` is the current
-report; `.../m2-baseline/report.md` is the M2 baseline every later change is
-compared against.
+183 tests pass. `backend/data/build/bench/results/m4-matrix/report.md` is the
+current report; `.../m2-baseline/report.md` is the M2 baseline every later
+change is compared against.
 
 ## Quick start
+
+All commands below run from `backend/` (`make` targets also work from the
+repo root — the top-level `Makefile` just delegates).
 
 The source books are copyrighted and are **not** in this repository. Point
 `PRAYER_DATA_URL` at an archive of `data/input/` to fetch them.
 
 ```bash
+cd backend
 python3 -m venv venv && make install
 ```
 
@@ -69,29 +77,35 @@ curl -s localhost:8000/suggest -H 'content-type: application/json' -d '{"situati
 
 ## Layout
 
-Organised by lifecycle, not by topic.
+Two self-contained projects, not one tree shared by both:
 
 ```
-src/prayer/       all the code, one installable package
-  paths.py        every on-disk location, in one place
-  refs/           printed references -> OSIS ranges
-  extract/        the dataset build — stdlib only, about a second end to end
-  api/            the service; api/build/ holds the index and golden builders
-  bench/          the evaluation harness
-policy/           reviewable YAML: situation lexicon, compose policy,
-                  safety terms, phrase bank
-configs/base.yaml runtime config; PRAYER_* env vars override it
-deploy/           Dockerfile and .dockerignore
-data/             nothing here is in version control
-  input/          downloaded — cleaned source markdown (copyrighted books)
-  scans/          downloaded — the original PDFs
-  vendor/         downloaded — ONNX encoder, WEB archives
-  build/          generated — datasets, text, index, bench, fixtures
+backend/            the API — organised by lifecycle, not by topic
+  src/prayer/       all the code, one installable package
+    paths.py        every on-disk location, in one place
+    refs/           printed references -> OSIS ranges
+    extract/        the dataset build — stdlib only, about a second end to end
+    api/            the service; api/build/ holds the index and golden builders
+    bench/          the evaluation harness
+  policy/           reviewable YAML: situation lexicon, compose policy,
+                    safety terms, phrase bank
+  configs/base.yaml runtime config; PRAYER_* env vars override it
+  deploy/           Dockerfile and .dockerignore
+  docs/             PRODUCT_BOOK.md, datasets.md
+  tests/
+  pyproject.toml, Makefile, .env.example
+  data/             nothing here is in version control
+    input/          downloaded — cleaned source markdown (copyrighted books)
+    scans/          downloaded — the original PDFs
+    vendor/         downloaded — ONNX encoder, WEB archives
+    build/          generated — datasets, text, index, bench, fixtures
+
+frontend/           the reader UI — React + TypeScript + Vite, see Web UI below
 ```
 
-**One rule: if a command can regenerate it, it lives in `data/build/`.** That
-makes `make clean && make setup` a safe, complete reset. Nothing under `data/`
-is edited by hand and nothing under it is committed.
+**One rule: if a command can regenerate it, it lives in `backend/data/build/`.**
+That makes `make clean && make setup` a safe, complete reset. Nothing under
+`data/` is edited by hand and nothing under it is committed.
 
 ## Results so far
 
@@ -117,7 +131,7 @@ the knob; it stays at 0 until M8 tunes it on Tier 3 **dev**.
 
 ## The text layer
 
-`data/build/text/COVERAGE.md` is the audit trail. Summary:
+`backend/data/build/text/COVERAGE.md` is the audit trail. Summary:
 
 - **224/224 references resolved.** WEB Classic (`eng-web`) carries 15 DC books
   including 3 and 4 Maccabees, so the gap section 4 flagged did not
@@ -141,11 +155,11 @@ From section 11. I have not guessed at any of them.
    every failure path — but which model to load is a quality/latency/RAM
    trade-off that should be measured on your hardware. Say the word and I will
    benchmark two or three candidates and recommend one.
-2. **Sign-off on `policy/compose_policy.yaml`.** Proposed, with reasoning
-   per entry: `exclude` the prophets of Baal; `explain_only` the proud
-   Pharisee, Antiochus IV, and Jdg 21:18; the six composable imprecatory
+2. **Sign-off on `backend/policy/compose_policy.yaml`.** Proposed, with
+   reasoning per entry: `exclude` the prophets of Baal; `explain_only` the
+   proud Pharisee, Antiochus IV, and Jdg 21:18; the six composable imprecatory
    records stay `compose` under the section 7.3 ask rule. `sign_off: pending`.
-3. **Crisis-notice wording and locale.** `policy/safety_terms.yaml`
+3. **Crisis-notice wording and locale.** `backend/policy/safety_terms.yaml`
    contains a **placeholder** with no phone number and no organisation name,
    because the product book forbids the agent inventing crisis-line details.
    The gate itself works and is tested. `sign_off: pending`, and the service
@@ -154,9 +168,9 @@ From section 11. I have not guessed at any of them.
 4. **Whether the deterministic composer is publicly selectable.** Currently
    `selectable=False`, so it is the internal fallback only. One word to change.
 5. **WEB text redistribution.** WEB is public domain and ebible.org states it is
-   redistributable; the archives are vendored under `data/vendor/web/`. Nothing
-   under `data/` is committed, so this only matters if you later ship the text
-   in an image or a release.
+   redistributable; the archives are vendored under `backend/data/vendor/web/`.
+   Nothing under `data/` is committed, so this only matters if you later ship
+   the text in an image or a release.
 
 ## CI/CD
 
@@ -167,7 +181,7 @@ From section 11. I have not guessed at any of them.
 | `quick` | byte-compile + import smoke; needs no data or secrets, so it runs on fork PRs too | yes |
 | `test` | full build, then `pytest -m "not perf"` — 179 tests | yes |
 | `perf` | the 4 wall-clock latency tests; numbers land in the run summary | **no** (`continue-on-error`) |
-| `docker` | builds `deploy/Dockerfile`, starts the container, asserts `/health` reports `status: ok` and `/suggest` returns a suggestion, records resident memory | yes |
+| `docker` | builds `backend/deploy/Dockerfile`, starts the container, asserts `/health` reports `status: ok` and `/suggest` returns a suggestion, records resident memory | yes |
 | `deploy` | on `main` only, after the three above: triggers Render, polls until `live`, smoke-tests the public URL | — |
 
 The latency budgets are tuned for a quiet machine, so they are advisory in CI and
@@ -188,7 +202,7 @@ commit SHA, which a deploy hook cannot.
 
 | Where | Name | Kind |
 | --- | --- | --- |
-| GitHub repo secret | `PRAYER_DATA_URL` | credential-free direct-download link to a `.zip` (or `.tar.gz`) of `data/input/` |
+| GitHub repo secret | `PRAYER_DATA_URL` | credential-free direct-download link to a `.zip` (or `.tar.gz`) of `backend/data/input/` |
 | GitHub environment `production` | `RENDER_API_KEY` | Render API key |
 | GitHub repo variable | `RENDER_SERVICE_ID` | `srv-…` |
 | GitHub repo variable | `RENDER_SERVICE_URL` | the public URL |
@@ -204,12 +218,31 @@ ONNX session — inside a 512 MB instance either way.
 make test
 ```
 
-The suite that matters most is `tests/test_invariants.py`: it is parametrized
-over every registered composer, so a new composer is held to anchor-verbatim,
-word bounds, movement completeness, no-scripture-outside-anchor and the
-imprecation policy simply by existing. `tests/test_contract.py` registers a
-retriever and composer from a test module and drives them end to end — that is
-the executable definition of the modularity requirement.
+The suite that matters most is `backend/tests/test_invariants.py`: it is
+parametrized over every registered composer, so a new composer is held to
+anchor-verbatim, word bounds, movement completeness, no-scripture-outside-anchor
+and the imprecation policy simply by existing. `backend/tests/test_contract.py`
+registers a retriever and composer from a test module and drives them end to
+end — that is the executable definition of the modularity requirement.
+
+## Web UI
+
+`frontend/` is a read-only React + TypeScript + Vite reader over the three
+source books, served by the backend's `/sources` API — a table of contents
+per book and one prayer/entry/passage at a time, respecting the same
+copyright redaction the API already enforces (no in-copyright prose is ever
+served or rendered).
+
+```bash
+make serve             # backend on :8000
+```
+```bash
+cd frontend && npm install && npm run dev   # or: make frontend-install && make frontend-dev
+```
+
+Then open `http://localhost:5173`. The dev server proxies `/api/*` to the
+backend; nothing here needs CORS. Not yet deployed — see `frontend/` for
+details.
 
 ## Licence
 

@@ -18,8 +18,8 @@ services:
     # this on would let an untested commit go live the moment it lands.
     autoDeploy: false
 
-    dockerfilePath: ./deploy/Dockerfile
-    dockerContext: .
+    dockerfilePath: ./backend/deploy/Dockerfile
+    dockerContext: ./backend
     healthCheckPath: /health
     numInstances: 1
 
@@ -47,7 +47,7 @@ services:
         sync: false
       # onnxruntime allocates per-thread arenas. Four threads on a free
       # instance's fractional CPU buys nothing and costs memory, which is the
-      # scarce resource at 512 MB. configs/base.yaml says 4 for a laptop; this
+      # scarce resource at 512 MB. backend/configs/base.yaml says 4 for a laptop; this
       # overrides it here (environment outranks the YAML).
       - key: PRAYER_EMBEDDING_THREADS
         value: "1"

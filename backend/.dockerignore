@@ -1,14 +1,11 @@
-# Docker reads this from the build CONTEXT root, which is the repo root
-# (`docker build -f deploy/Dockerfile .`) — not from deploy/.
+# Docker reads this from the build CONTEXT root, which is backend/
+# (`docker build -f backend/deploy/Dockerfile backend`) — not from deploy/.
 #
 # The image builds its own data at build time, so none of data/ is copied in.
 data/
-trash/
 venv/
 tests/
-docs/
 bench/
-.git/
 .pytest_cache/
 __pycache__/
 *.egg-info/

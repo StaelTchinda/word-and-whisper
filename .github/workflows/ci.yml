@@ -42,10 +42,10 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: backend/pyproject.toml
       - run: make install PY=python
       - name: Byte-compile everything
-        run: python -m compileall -q src tests
+        run: python -m compileall -q backend/src backend/tests
       # app.py builds the corpus in `lifespan`, not at import, so importing it
       # is a real check that needs no data on disk.
       - name: Import smoke
@@ -66,6 +66,7 @@ jobs:
         with:
           data-url: ${{ secrets.PRAYER_DATA_URL }}
       - name: pytest — 179 tests, latency budgets excluded
+        working-directory: backend
         run: python -m pytest -q -m "not perf" --durations=10
 
   # Never blocks a merge: the budgets are tuned for a quiet machine and shared
@@ -84,11 +85,13 @@ jobs:
           data-url: ${{ secrets.PRAYER_DATA_URL }}
       - name: pytest -m perf (advisory)
         id: perf
+        working-directory: backend
         run: |
           set -o pipefail
           python -m pytest -q -m perf -rA 2>&1 | tee perf.log
       - name: Surface the numbers in the run summary
         if: always()
+        working-directory: backend
         run: |
           {
             echo "### Latency budgets (advisory)"
@@ -109,8 +112,8 @@ jobs:
       - name: Build the deploy image
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: deploy/Dockerfile
+          context: ./backend
+          file: backend/deploy/Dockerfile
           build-args: |
             PRAYER_DATA_URL=${{ secrets.PRAYER_DATA_URL }}
           load: true

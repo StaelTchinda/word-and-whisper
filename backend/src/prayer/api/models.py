@@ -466,3 +466,34 @@ class WattersCitation(BaseModel):
 class CitationsResponse(BaseModel):
     total: int
     items: list[WattersCitation]
+
+
+# --- source table of contents -----------------------------------------------
+#
+# One pre-grouped tree per source, following each source's own structure
+# (Parks/Lockyer: canon -> Bible book; Watters: the original book's own
+# chapters -- see prayer.api.sources._build_toc for why canon doesn't apply
+# there). Read-only navigation aid for the ebook-reader UI; not part of the
+# section 6 contract.
+
+class TocItem(BaseModel):
+    id: str
+    title: Optional[str] = None
+    ref_display: str
+
+
+class TocSubsection(BaseModel):
+    id: str
+    label: str
+    items: list[TocItem] = Field(default_factory=list)
+
+
+class TocSection(BaseModel):
+    id: str
+    label: str
+    subsections: list[TocSubsection] = Field(default_factory=list)
+
+
+class TocResponse(BaseModel):
+    source_id: str
+    sections: list[TocSection] = Field(default_factory=list)

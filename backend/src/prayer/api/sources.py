@@ -27,13 +27,21 @@ from prayer.api.models import (CanonSection, CitationsResponse,
                         LockyerItemDetail, LockyerScriptureQuote,
                         ParksItemDetail, SearchResponse, SourceInfo,
                         SourceItemDetail, SourceItemSummary, SourceRef,
-                        SourcesResponse, WattersCitation,
+                        SourcesResponse, TocItem, TocResponse, TocSection,
+                        TocSubsection, WattersCitation,
                         WattersPassageDetail, WattersTopicTag)
 from prayer.refs.bible_books import BOOKS
 
 log = logging.getLogger("prayer.api.sources")
 
 OSIS_TO_CANON = {book.osis: book.canon for book in BOOKS.values()}
+
+# BOOKS.values() is already in canonical reading order (OT, then DC, then NT,
+# each book in scripture order) -- reuse that order for the TOC instead of
+# re-deriving it.
+CANON_ORDER = ["OT", "DC", "NT"]
+CANON_LABELS = {"OT": "Old Testament", "DC": "Deuterocanon", "NT": "New Testament"}
+BOOK_ORDER = {book.osis: i for i, book in enumerate(BOOKS.values())}
 
 SOURCE_META: dict[str, dict] = {
     "parks2021": dict(
@@ -64,7 +72,7 @@ def _ref_display(primary_ref: Optional[str], refs: list[SourceRef]) -> str:
 
 # --- per-source loaders ------------------------------------------------
 
-def _load_parks(source_dir: Path) -> tuple[list[ParksItemDetail], dict]:
+def _load_parks(source_dir: Path) -> tuple[list[ParksItemDetail], dict, dict]:
     rows = _read_jsonl(source_dir / "prayers.jsonl")
     items = [
         ParksItemDetail(
@@ -78,10 +86,10 @@ def _load_parks(source_dir: Path) -> tuple[list[ParksItemDetail], dict]:
         )
         for r in rows
     ]
-    return items, {}
+    return items, {}, {}
 
 
-def _load_lockyer(source_dir: Path) -> tuple[list[LockyerItemDetail], dict]:
+def _load_lockyer(source_dir: Path) -> tuple[list[LockyerItemDetail], dict, dict]:
     rows = _read_jsonl(source_dir / "entries.jsonl")
     items = []
     for r in rows:
@@ -103,10 +111,10 @@ def _load_lockyer(source_dir: Path) -> tuple[list[LockyerItemDetail], dict]:
             has_poetry=bool(poetry),
             exposition_paragraph_count=len(exposition.get("paragraphs", [])),
         ))
-    return items, {}
+    return items, {}, {}
 
 
-def _load_watters(source_dir: Path) -> tuple[list[WattersPassageDetail], dict[str, list[WattersCitation]]]:
+def _load_watters(source_dir: Path) -> tuple[list[WattersPassageDetail], dict[str, list[WattersCitation]], dict]:
     passage_rows = _read_jsonl(source_dir / "passages.jsonl")
     citation_rows = _read_jsonl(source_dir / "citations.jsonl")
     citations_by_id = {c["id"]: c for c in citation_rows}
@@ -139,10 +147,19 @@ def _load_watters(source_dir: Path) -> tuple[list[WattersPassageDetail], dict[st
             for cid in cids
             for c in [citations_by_id[cid]]
         ]
-    return items, citations_by_passage
+
+    # The original book's own chapters (data/build/datasets/sources/watters1883/
+    # chapters.jsonl) -- Watters is organised topically ("Who Prayed", "Duty of
+    # Prayer", ...), not by canon or Bible book, so this is the source's real
+    # table of contents. Keyed by chapter_n to match passages[].topics[].chapter_n.
+    chapters = {
+        r["chapter_n"]: {"title": r["title"], "roman": r.get("roman")}
+        for r in _read_jsonl(source_dir / "chapters.jsonl")
+    }
+    return items, citations_by_passage, {"chapters": chapters}
 
 
-_LOADERS: dict[str, Callable[[Path], tuple[list, dict]]] = {
+_LOADERS: dict[str, Callable[[Path], tuple[list, dict, dict]]] = {
     "parks2021": _load_parks,
     "lockyer1959": _load_lockyer,
     "watters1883": _load_watters,
@@ -210,6 +227,7 @@ class SourceStore:
     items: list = field(default_factory=list)
     by_id: dict = field(default_factory=dict)
     citations_by_passage: dict = field(default_factory=dict)
+    extra: dict = field(default_factory=dict)
     _search_blobs: Optional[dict] = field(default=None, init=False, repr=False)
 
     def blobs(self) -> dict:
@@ -226,11 +244,11 @@ def load_sources(sources_dir: Path) -> dict[str, SourceStore]:
     stores: dict[str, SourceStore] = {}
     for source_id, loader in _LOADERS.items():
         try:
-            items, citations_by_passage = loader(sources_dir / source_id)
+            items, citations_by_passage, extra = loader(sources_dir / source_id)
             stores[source_id] = SourceStore(
                 source_id=source_id, status="ok",
                 items=items, by_id={i.id: i for i in items},
-                citations_by_passage=citations_by_passage)
+                citations_by_passage=citations_by_passage, extra=extra)
         except Exception as exc:  # not-yet-built source must not crash the app
             log.error("failed to load source %s: %s", source_id, exc)
             stores[source_id] = SourceStore(
@@ -281,6 +299,96 @@ def list_sources() -> SourcesResponse:
 @router.get("/{source_id}", response_model=SourceInfo)
 def get_source(source_id: str) -> SourceInfo:
     return _source_info(source_id, _store_or_404(source_id))
+
+
+# --- table of contents ---------------------------------------------------
+#
+# One pre-grouped tree per source, following each source's own structure
+# rather than one scheme applied uniformly -- see docs on TocResponse.
+
+def _toc_item(item) -> TocItem:
+    if isinstance(item, WattersPassageDetail):
+        return TocItem(id=item.id, ref_display=item.osis)
+    return TocItem(id=item.id, title=item.title,
+                    ref_display=_ref_display(getattr(item, "primary_ref", None), item.refs))
+
+
+def _build_toc_by_book(store: SourceStore, *, group_key: Callable, group_label: Callable) -> list[TocSection]:
+    """Parks/Lockyer: canon -> Bible book (Parks) or the book_section the
+    source itself organises by (Lockyer). Both are already presented in
+    scripture order in their source books, so canon is the natural top
+    level."""
+    grouped: dict[str, dict[str, list]] = {c: {} for c in CANON_ORDER}
+    labels: dict[tuple[str, str], str] = {}
+    order_keys: dict[tuple[str, str], int] = {}
+    for item in store.items:
+        canon = item.canon_section
+        key = group_key(item)
+        bucket = grouped.setdefault(canon, {})
+        bucket.setdefault(key, []).append(item)
+        labels.setdefault((canon, key), group_label(item))
+        book = item.refs[0].book if getattr(item, "refs", None) else None
+        order_key = BOOK_ORDER.get(book, len(BOOK_ORDER))
+        order_keys[(canon, key)] = min(order_key, order_keys.get((canon, key), order_key))
+
+    sections = []
+    for canon in CANON_ORDER:
+        books = grouped.get(canon) or {}
+        if not books:
+            continue
+        subsections = [
+            TocSubsection(id=key, label=labels[(canon, key)],
+                          items=[_toc_item(i) for i in books[key]])
+            for key in sorted(books, key=lambda k: order_keys[(canon, k)])
+        ]
+        sections.append(TocSection(id=canon, label=CANON_LABELS[canon], subsections=subsections))
+    return sections
+
+
+def _build_toc_watters(store: SourceStore) -> list[TocSection]:
+    """Watters is organised topically ("Who Prayed", "Duty of Prayer", ...)
+    and each chapter cuts across canon/book, so canon grouping doesn't apply
+    here -- the chapters themselves (data/build/datasets/sources/watters1883/
+    chapters.jsonl, loaded into store.extra) are the source's real table of
+    contents. A passage can belong to more than one chapter (it may be cited
+    in more than one place in the original book) and is listed under each."""
+    chapters: dict[int, dict] = store.extra.get("chapters", {})
+    by_chapter: dict[int, list] = {n: [] for n in chapters}
+    for item in store.items:
+        seen = set()
+        for topic in item.topics:
+            if topic.chapter_n not in seen:
+                seen.add(topic.chapter_n)
+                by_chapter.setdefault(topic.chapter_n, []).append(item)
+
+    subsections = [
+        TocSubsection(
+            id=str(n), label=f"{chapters[n]['roman']}. {chapters[n]['title']}" if n in chapters
+                             else f"Chapter {n}",
+            items=[_toc_item(i) for i in items],
+        )
+        for n, items in sorted(by_chapter.items())
+    ]
+    return [TocSection(id="chapters", label="Chapters", subsections=subsections)]
+
+
+@router.get("/{source_id}/toc", response_model=TocResponse)
+def get_toc(source_id: str) -> TocResponse:
+    store = _loaded_store(source_id)
+    if source_id == "parks2021":
+        sections = _build_toc_by_book(
+            store,
+            group_key=lambda i: i.refs[0].book if i.refs else "?",
+            group_label=lambda i: i.refs[0].book_name if i.refs else "Unplaced",
+        )
+    elif source_id == "lockyer1959":
+        sections = _build_toc_by_book(
+            store, group_key=lambda i: i.book_section, group_label=lambda i: i.book_section)
+    elif source_id == "watters1883":
+        sections = _build_toc_watters(store)
+    else:
+        raise HTTPException(404, detail=f"no source {source_id!r}")
+    return TocResponse(source_id=source_id, sections=sections)
 
 
 def _item_matches(source_id: str, item, *, book: Optional[str], canon: Optional[CanonSection],

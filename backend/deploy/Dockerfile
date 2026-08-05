@@ -1,5 +1,6 @@
-# Build from the repository root:
-#   docker build -f deploy/Dockerfile --build-arg PRAYER_DATA_URL=… -t prayer .
+# Build with backend/ as the context (not the repo root — the frontend has
+# nothing this image needs):
+#   docker build -f backend/deploy/Dockerfile --build-arg PRAYER_DATA_URL=… -t prayer backend
 #
 # The image builds its own data rather than shipping a prebuilt artifact: the
 # extractors are stdlib-only and the whole build takes about a second, so there

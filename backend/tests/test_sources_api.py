@@ -180,3 +180,68 @@ def test_watters_ids_are_unique_and_path_safe(sources_store):
     ids = [item.id for item in sources_store["watters1883"].items]
     assert len(ids) == len(set(ids))
     assert all("/" not in i and "?" not in i for i in ids)
+
+
+# --- table of contents ------------------------------------------------------
+
+def _toc_all_item_ids(sections: list[dict]) -> list[str]:
+    return [item["id"]
+            for section in sections
+            for subsection in section["subsections"]
+            for item in subsection["items"]]
+
+
+def test_unknown_source_toc_404s(client):
+    assert client.get("/sources/nope/toc").status_code == 404
+
+
+def test_parks_toc_groups_by_canon_then_book_and_covers_every_item(client):
+    body = client.get("/sources/parks2021/toc").json()
+    assert body["source_id"] == "parks2021"
+    section_ids = [s["id"] for s in body["sections"]]
+    canon_order = ["OT", "DC", "NT"]
+    assert section_ids == [c for c in canon_order if c in section_ids]
+
+    genesis = next(sub for s in body["sections"] for sub in s["subsections"]
+                   if sub["label"] == "Genesis")
+    assert genesis["items"]
+    assert all(i["title"] for i in genesis["items"])
+
+    ids = _toc_all_item_ids(body["sections"])
+    assert len(ids) == len(set(ids)) == 224  # every parks item appears exactly once
+
+
+def test_lockyer_toc_groups_by_book_section(client):
+    body = client.get("/sources/lockyer1959/toc").json()
+    genesis = next(sub for s in body["sections"] for sub in s["subsections"]
+                   if sub["id"] == "Genesis")
+    assert genesis["items"]
+    ids = _toc_all_item_ids(body["sections"])
+    assert len(ids) == len(set(ids)) == 347
+
+
+def test_watters_toc_is_chapters_not_canon(client):
+    """Watters' chapters ("Who Prayed", "Duty of Prayer", ...) are topical and
+    cut across canon/Bible book, so the toc has one flat run of chapters
+    rather than an OT/DC/NT split -- see prayer.api.sources._build_toc_watters."""
+    body = client.get("/sources/watters1883/toc").json()
+    assert body["source_id"] == "watters1883"
+    assert [s["id"] for s in body["sections"]] == ["chapters"]
+
+    subsections = body["sections"][0]["subsections"]
+    chapter_ns = [int(sub["id"]) for sub in subsections]
+    assert chapter_ns == sorted(chapter_ns)
+    assert chapter_ns[0] == 1
+
+    first = subsections[0]
+    assert first["label"] == "I. Who Prayed"
+    assert first["items"]
+    assert all(i["ref_display"] and i["title"] is None for i in first["items"])
+
+    # a passage cited from more than one chapter of the original book is
+    # listed under each of them
+    by_item = {}
+    for sub in subsections:
+        for item in sub["items"]:
+            by_item.setdefault(item["id"], set()).add(sub["id"])
+    assert any(len(chs) > 1 for chs in by_item.values())
