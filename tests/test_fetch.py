@@ -1,8 +1,7 @@
 """Tests for the source-archive fetch.
 
-This runs in exactly one place that matters and is hard to debug there: inside
-a container build on a deploy platform. The redirect case in particular fails
-only when pointed at a private repo, which is the case it exists to serve.
+This runs in one place that matters and is hard to debug there: inside a
+container build on a deploy platform.
 """
 import io
 import tarfile
@@ -12,8 +11,7 @@ import zipfile
 
 import pytest
 
-from prayer.extract.fetch import (_StripAuthOnCrossHostRedirect, extract, fetch,
-                                  main)
+from prayer.extract.fetch import extract, fetch, main
 
 NAMES = ("parks2021/a.md", "lockyer1959/b.md")
 
@@ -73,7 +71,7 @@ def served(monkeypatch):
         def __exit__(self, *a):
             return False
 
-    def fake_open(self, req, timeout=None):
+    def fake_open(self, req, data=None, timeout=None):
         seen["url"] = req.full_url
         seen["headers"] = {k.lower(): v for k, v in req.headers.items()}
         return _Resp(_targz())
@@ -88,40 +86,10 @@ def test_extracts_into_dest(tmp_path, served):
     assert (tmp_path / "parks2021/a.md").read_text() == "# hello\n"
 
 
-def test_token_becomes_a_bearer_header(tmp_path, served):
-    fetch("https://example.invalid/input.tar.gz", tmp_path, token="ghp_x")
-    assert served["headers"]["authorization"] == "Bearer ghp_x"
-    # Without this a GitHub release-asset URL returns JSON metadata, not bytes.
-    assert served["headers"]["accept"] == "application/octet-stream"
-
-
-def test_no_token_sends_no_auth(tmp_path, served):
-    fetch("https://example.invalid/input.tar.gz", tmp_path)
+def test_sends_no_authorization_header(tmp_path, served):
+    """The URL must be one that needs no credentials."""
+    fetch("https://example.invalid/input.zip", tmp_path)
     assert "authorization" not in served["headers"]
-
-
-def test_auth_is_stripped_when_a_redirect_crosses_hosts():
-    """A GitHub asset 302s to S3, which rejects a request carrying two auth
-    mechanisms. Replaying the bearer there is the bug this guards."""
-    handler = _StripAuthOnCrossHostRedirect()
-    req = urllib.request.Request(
-        "https://api.github.com/repos/o/r/releases/assets/1",
-        headers={"Authorization": "Bearer secret", "Accept": "application/octet-stream"},
-    )
-    new = handler.redirect_request(
-        req, io.BytesIO(), 302, "Found", {}, "https://objects.githubusercontent.com/x")
-    assert new is not None
-    assert not any(k.lower() == "authorization" for k in new.headers)
-    assert not any(k.lower() == "authorization" for k in new.unredirected_hdrs)
-
-
-def test_auth_survives_a_same_host_redirect():
-    handler = _StripAuthOnCrossHostRedirect()
-    req = urllib.request.Request("https://api.github.com/a",
-                                 headers={"Authorization": "Bearer secret"})
-    new = handler.redirect_request(req, io.BytesIO(), 302, "Found", {},
-                                   "https://api.github.com/b")
-    assert any(k.lower() == "authorization" for k in new.headers)
 
 
 def test_main_without_a_url_explains_itself(capsys, monkeypatch):
@@ -132,20 +100,18 @@ def test_main_without_a_url_explains_itself(capsys, monkeypatch):
     assert "copyrighted" in err
 
 
-def test_main_hints_at_the_token_when_the_server_refuses(capsys, monkeypatch, tmp_path):
-    def boom(self, req, timeout=None):
+def test_main_reports_a_refusal(capsys, monkeypatch, tmp_path):
+    def boom(self, req, data=None, timeout=None):
         raise urllib.error.HTTPError(req.full_url, 404, "Not Found", {}, None)
 
     monkeypatch.setattr(urllib.request.OpenerDirector, "open", boom)
     assert main(["https://example.invalid/x.zip", "--dest", str(tmp_path)]) == 1
-    err = capsys.readouterr().err
-    assert "fetch failed" in err
-    assert "PRAYER_DATA_TOKEN" in err
+    assert "fetch failed" in capsys.readouterr().err
 
 
-def test_main_does_not_blame_the_token_for_a_wrong_link(capsys, monkeypatch, tmp_path):
+def test_main_names_the_wrong_link_mistake(capsys, monkeypatch, tmp_path):
     """A share URL that serves its HTML download page is the likeliest mistake
-    (Dropbox ?dl=0, a Drive interstitial). Pointing at auth would misdirect."""
+    (Dropbox ?dl=0, a Drive interstitial)."""
     class _Resp(io.BytesIO):
         def __enter__(self):
             return self
@@ -154,8 +120,7 @@ def test_main_does_not_blame_the_token_for_a_wrong_link(capsys, monkeypatch, tmp
             return False
 
     monkeypatch.setattr(urllib.request.OpenerDirector, "open",
-                        lambda self, req, timeout=None: _Resp(b"<!doctype html>"))
+                        lambda self, req, data=None, timeout=None: _Resp(b"<!doctype html>"))
     assert main(["https://example.invalid/x.zip", "--dest", str(tmp_path)]) == 1
     err = capsys.readouterr().err
     assert "neither a .zip nor a .tar.gz" in err
-    assert "PRAYER_DATA_TOKEN" not in err

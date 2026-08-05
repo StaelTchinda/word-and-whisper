@@ -45,11 +45,6 @@ services:
       # host where you can swap the object behind the same name.
       - key: PRAYER_DATA_URL
         sync: false
-      # Needed when PRAYER_DATA_URL points into a private repo. Render has no
-      # access to that repo through its GitHub connection — the connection is
-      # scoped to this code repo — so the token is the only way in.
-      - key: PRAYER_DATA_TOKEN
-        sync: false
       - key: PYTHONUNBUFFERED
         value: "1"
       - key: HF_HUB_DISABLE_TELEMETRY

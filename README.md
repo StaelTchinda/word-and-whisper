@@ -181,13 +181,11 @@ commit SHA, which a deploy hook cannot.
 
 | Where | Name | Kind |
 | --- | --- | --- |
-| GitHub repo secret | `PRAYER_DATA_URL` | direct-download link to a `.zip` (or `.tar.gz`) of `data/input/` |
-| GitHub repo secret | `PRAYER_DATA_TOKEN` | *optional* — only if that URL needs auth; leave unset for a plain link |
+| GitHub repo secret | `PRAYER_DATA_URL` | credential-free direct-download link to a `.zip` (or `.tar.gz`) of `data/input/` |
 | GitHub environment `production` | `RENDER_API_KEY` | Render API key |
 | GitHub repo variable | `RENDER_SERVICE_ID` | `srv-…` |
 | GitHub repo variable | `RENDER_SERVICE_URL` | the public URL |
 | Render dashboard | `PRAYER_DATA_URL` | same value; `sync: false` in `render.yaml` |
-| Render dashboard | `PRAYER_DATA_TOKEN` | *optional* — same as above |
 
 Measured footprint, which is why `render.yaml` asks for the free plan: **73 MB**
 at startup on the `bm25` default, **~321 MB** once a hybrid request loads the

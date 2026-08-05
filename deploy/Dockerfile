@@ -37,17 +37,15 @@ from prayer import paths; download_model(paths.EMBEDDING_MODEL)"
 # archive of data/input/. Without it the build stops here rather than producing
 # an image that would fail at runtime.
 ARG PRAYER_DATA_URL
-# Optional bearer token, for an archive in a private repo. Empty for a
-# pre-signed URL, which carries its own authentication.
-ARG PRAYER_DATA_TOKEN=""
-ENV PRAYER_DATA_URL=$PRAYER_DATA_URL PRAYER_DATA_TOKEN=$PRAYER_DATA_TOKEN
+ENV PRAYER_DATA_URL=$PRAYER_DATA_URL
 RUN python -m prayer.extract.fetch \
  && python -m prayer.extract --quiet \
  && python -m prayer.extract.text --quiet \
  && python -m prayer.api.build.index \
  && rm -rf data/input data/vendor/web
-# Do not leave the credentials in the running container's environment.
-ENV PRAYER_DATA_URL="" PRAYER_DATA_TOKEN=""
+# The URL is still a thing worth not leaving lying around in the running
+# container's environment, even without a token beside it.
+ENV PRAYER_DATA_URL=""
 
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=20s \

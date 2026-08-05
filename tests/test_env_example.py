@@ -23,8 +23,7 @@ def test_no_variable_is_documented_that_nothing_reads():
     known = {f"PRAYER_{n.upper()}" for n in Settings.model_fields}
     # Read directly rather than through Settings.
     known |= {"PRAYER_ROOT", "PRAYER_HOST", "PRAYER_PORT", "PRAYER_RELOAD",
-              "PORT", "PRAYER_DATA_URL", "PRAYER_DATA_TOKEN",
-              "HF_HUB_DISABLE_TELEMETRY"}
+              "PORT", "PRAYER_DATA_URL", "HF_HUB_DISABLE_TELEMETRY"}
     assert not NAMES - known, f".env.example invents: {sorted(NAMES - known)}"
 
 

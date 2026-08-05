@@ -2,9 +2,6 @@
 # of it from scratch; `make data` alone takes about a second.
 PY ?= venv/bin/python
 PRAYER_DATA_URL ?=
-# Optional bearer token, for a URL that needs auth — e.g. a release asset in a
-# private GitHub repo. Unset for a pre-signed URL, which carries its own auth.
-PRAYER_DATA_TOKEN ?=
 
 .PHONY: help install fetch data text index golden queries setup serve bench test clean distclean
 
