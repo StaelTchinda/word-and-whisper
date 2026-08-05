@@ -2,7 +2,7 @@
 # looks for render.yaml there, on the default branch.
 services:
   - type: web
-    name: word-and-whisper
+    name: word-and-whisper-api
     runtime: docker
     # Measured on the real service: 73 MB at startup with the bm25 default,
     # rising to ~321 MB once a hybrid request loads the ONNX session. That fits
@@ -55,3 +55,46 @@ services:
         value: "1"
       - key: HF_HUB_DISABLE_TELEMETRY
         value: "1"
+
+  # The reader UI (frontend/). A static site, not the Docker service above --
+  # own free plan, own URL, no CORS needed: the /api/* rewrite below proxies
+  # server-side (Render "rewrite", not "redirect"), so frontend/src/api/client.ts's
+  # relative fetch('/api/...') calls work in production exactly as they do
+  # against frontend/vite.config.ts's dev proxy, unchanged.
+  #
+  # Named word-and-whisper (not word-and-whisper-web) deliberately: this is
+  # the primary/human-facing URL. The API service above got renamed to
+  # word-and-whisper-api to free this name up -- see the runbook for why that
+  # needed a delete+recreate rather than an in-place rename.
+  - type: web
+    name: word-and-whisper
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    branch: main
+
+    # CI does not yet drive this deploy (unlike the Docker service, ci.yml has
+    # no job that triggers it) -- until that's added, deploy this one from the
+    # Render dashboard, or flip this to true if manual deploys are too easy to
+    # forget.
+    autoDeploy: false
+
+    routes:
+      # CHECK THIS: assumes the API service above lands at
+      # https://word-and-whisper-api.onrender.com (its name + Render's default
+      # subdomain). It's a fresh service, so this should hold, but confirm
+      # against the Render dashboard before relying on it.
+      #
+      # Must come before the /* fallback below -- Render evaluates routes in
+      # order, and /* would otherwise match /api/* first and serve index.html
+      # instead of proxying.
+      - type: rewrite
+        source: /api/*
+        destination: https://word-and-whisper-api.onrender.com/*
+      # SPA fallback for client-side routes (/, /sources/:id, /sources/:id/:itemId).
+      # Render skips this for paths that already exist as built files (JS/CSS/etc),
+      # so it never shadows a real asset under frontend/dist.
+      - type: rewrite
+        source: /*
+        destination: /index.html
