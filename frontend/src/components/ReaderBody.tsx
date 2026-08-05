@@ -48,6 +48,12 @@ export function ParksBody({
 }
 
 export function LockyerBody({ item }: { item: LockyerItemDetail }) {
+  // has_exposition/has_poetry are always accurate; exposition/poetry are only
+  // populated when the backend was started with
+  // PRAYER_INCLUDE_COPYRIGHTED_TEXT=true (see docs/datasets.md). A mismatch
+  // between the two means the content exists but this deployment withholds it.
+  const withheld = (item.has_exposition && !item.exposition) || (item.has_poetry && item.poetry.length === 0)
+
   return (
     <>
       <div className="reader-body">
@@ -64,19 +70,61 @@ export function LockyerBody({ item }: { item: LockyerItemDetail }) {
             </span>
           </blockquote>
         ))}
+
+        {item.exposition && (
+          <div className="exposition">
+            {item.exposition.paragraphs.map((p, i) => (
+              <p key={i}>{p}</p>
+            ))}
+            {item.exposition.outline.length > 0 && (
+              <ol className="outline">
+                {item.exposition.outline.map((o) => (
+                  <li key={o.n}>{o.text}</li>
+                ))}
+              </ol>
+            )}
+          </div>
+        )}
+
+        {item.poetry.map((poem) => (
+          <blockquote className="quote poem" key={poem.position}>
+            {poem.text.split('\n').map((line, i) => (
+              <span className="quote-text" key={i}>
+                {line}
+              </span>
+            ))}
+            {poem.attribution && <span className="quote-attr">{poem.attribution}</span>}
+          </blockquote>
+        ))}
       </div>
 
-      {(item.has_exposition || item.has_poetry) && (
+      {withheld && (
         <p className="notice">
           Lockyer's exposition{item.has_poetry ? ' and poetry' : ''} on this entry
           {item.has_exposition &&
             ` (${item.exposition_paragraph_count} paragraph${
               item.exposition_paragraph_count === 1 ? '' : 's'
             })`}{' '}
-          are not reproduced here — in copyright, © Zondervan 1959.
+          {item.exposition_paragraph_count === 1 ? 'is' : 'are'} not reproduced here — in
+          copyright, © Zondervan 1959. Set PRAYER_INCLUDE_COPYRIGHTED_TEXT=true on the API to
+          read it for personal, local use.
         </p>
       )}
     </>
+  )
+}
+
+function CitationNotes({ citation }: { citation: WattersCitation }) {
+  if (citation.notes.length === 0 && !citation.see_also) return null
+  return (
+    <div className="citation-notes">
+      {citation.notes.map((note, i) => (
+        <p className="note" key={i}>
+          {note}
+        </p>
+      ))}
+      {citation.see_also && <p className="see-also">See also: {citation.see_also}</p>}
+    </div>
   )
 }
 
@@ -89,10 +137,13 @@ export function WattersBody({
   citations: WattersCitation[] | undefined
   citationsLoading: boolean
 }) {
+  const ownCitation = citations?.find((c) => c.text === item.text && c.text_source === 'inline')
+
   if (item.text) {
     return (
       <div className="reader-body">
         <p>{item.text}</p>
+        {ownCitation && <CitationNotes citation={ownCitation} />}
       </div>
     )
   }
@@ -107,9 +158,12 @@ export function WattersBody({
             <li key={c.id}>
               <div className="citation-meta">
                 Ch. {c.chapter_n} · {c.chapter_title}
-                {c.topic ? ` · ${c.topic}` : ''} · {c.ref_raw}
+                {c.topic ? ` · ${c.topic}` : ''}
+                {c.subtopic ? ` · ${c.subtopic}` : ''} · {c.ref_raw}
+                {c.page ? ` · p. ${c.page}` : ''}
               </div>
               <div className="reader-body">{c.text}</div>
+              <CitationNotes citation={c} />
             </li>
           ))}
         </ul>

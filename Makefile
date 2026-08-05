@@ -3,13 +3,13 @@
 # needing `working-directory: backend` on every step). Command-line variable
 # overrides (e.g. `make install PY=python`) propagate to the sub-make
 # automatically via GNU Make's MAKEOVERRIDES.
-.PHONY: help install fetch check-url data text index golden queries setup serve bench test clean distclean frontend-install frontend-dev frontend-build
+.PHONY: help install fetch check-url data text index golden queries setup serve kill-serve bench test clean distclean frontend-install frontend-dev frontend-build
 
 help:  ## list backend + frontend targets
 	@grep -E '^[a-z-]+:.*?## ' backend/Makefile | sed 's/:.*## /\t/' | expand -t22
 	@grep -E '^[a-z-]+:.*?## ' Makefile | sed 's/:.*## /\t/' | expand -t22
 
-install fetch check-url data text index golden queries setup serve bench test clean distclean:
+install fetch check-url data text index golden queries setup serve kill-serve bench test clean distclean:
 	@$(MAKE) -C backend $@
 
 frontend-install:  ## install the frontend's dependencies

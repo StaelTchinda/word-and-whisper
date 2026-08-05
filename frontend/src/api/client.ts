@@ -1,9 +1,15 @@
 import type {
   CitationsResponse,
+  LockyerBookSection,
+  LockyerBookSectionsResponse,
   PrayerDetail,
   SourceItemDetail,
   SourcesResponse,
   TocResponse,
+  WattersBackMatter,
+  WattersCrossReference,
+  WattersEditorialNote,
+  WattersFrontMatter,
 } from './types'
 
 class ApiError extends Error {
@@ -38,6 +44,30 @@ export function getSourceItem(sourceId: string, itemId: string): Promise<SourceI
 
 export function getWattersCitations(itemId: string): Promise<CitationsResponse> {
   return getJson(`/sources/watters1883/items/${itemId}/citations`)
+}
+
+export function listLockyerBookSections(): Promise<LockyerBookSectionsResponse> {
+  return getJson('/sources/lockyer1959/book-sections')
+}
+
+export function getLockyerBookSection(sectionId: string): Promise<LockyerBookSection> {
+  return getJson(`/sources/lockyer1959/book-sections/${sectionId}`)
+}
+
+export function getWattersFrontMatter(): Promise<WattersFrontMatter> {
+  return getJson('/sources/watters1883/front-matter')
+}
+
+export function getWattersBackMatter(): Promise<WattersBackMatter> {
+  return getJson('/sources/watters1883/back-matter')
+}
+
+export function listWattersEditorialNotes(): Promise<WattersEditorialNote[]> {
+  return getJson('/sources/watters1883/editorial-notes')
+}
+
+export function listWattersCrossReferences(): Promise<WattersCrossReference[]> {
+  return getJson('/sources/watters1883/cross-references')
 }
 
 // Parks items don't carry their own book prose (SourceInfo.text_includable

@@ -397,10 +397,32 @@ class LockyerScriptureQuote(BaseModel):
     translation: Literal["KJV"] = "KJV"
 
 
+class LockyerOutlinePoint(BaseModel):
+    n: int
+    text: str
+
+
+class LockyerPoem(BaseModel):
+    position: int
+    text: str
+    lines: int
+    attribution: Optional[str] = None
+
+
+class LockyerExposition(BaseModel):
+    """Lockyer's own prose. In copyright (c. 1959 Zondervan) -- only ever
+    populated when `Settings.include_copyrighted_text` is true; see
+    `prayer.api.sources` and docs/datasets.md licensing section."""
+    paragraphs: list[str]
+    word_count: int
+    outline: list[LockyerOutlinePoint] = Field(default_factory=list)
+
+
 class LockyerItemDetail(BaseModel):
-    """Allowlist only. `exposition`, `poetry`, and `derived.application_sentences`
-    are in-copyright (c. 1959 Zondervan) and must never be added here or
-    indexed for `q` search -- see docs/datasets.md licensing section."""
+    """`exposition`, `poetry`, and `application_sentences` are in-copyright
+    (c. 1959 Zondervan) -- populated only when `include_copyrighted_text` is
+    on, and never indexed for `q` search regardless. See
+    docs/datasets.md licensing section."""
     source_id: Literal["lockyer1959"] = "lockyer1959"
     id: str
     unit: Literal["entry"] = "entry"
@@ -417,6 +439,32 @@ class LockyerItemDetail(BaseModel):
     has_exposition: bool
     has_poetry: bool
     exposition_paragraph_count: int
+    exposition: Optional[LockyerExposition] = None
+    poetry: list[LockyerPoem] = Field(default_factory=list)
+    application_sentences: list[str] = Field(default_factory=list)
+    page: Optional[int] = None
+
+
+class LockyerBookSection(BaseModel):
+    """One Bible book's introduction, incl. the 22 books with no recorded
+    prayers -- for those, this is the only content Lockyer gives. `intro` is
+    the same in-copyright prose as `LockyerExposition` and follows the same
+    gating."""
+    id: str
+    source_id: Literal["lockyer1959"] = "lockyer1959"
+    book: Optional[str] = None
+    book_section: str
+    canon_section: CanonSection
+    has_prayers: bool
+    n_prayer_entries: int
+    has_intro: bool
+    intro_word_count: int
+    intro: Optional[LockyerExposition] = None
+    poetry: list[LockyerPoem] = Field(default_factory=list)
+
+
+class LockyerBookSectionsResponse(BaseModel):
+    items: list[LockyerBookSection]
 
 
 class WattersTopicTag(BaseModel):
@@ -461,11 +509,48 @@ class WattersCitation(BaseModel):
     translation: Literal["KJV"] = "KJV"
     text_source: str
     page: Optional[int] = None
+    # `body_prose.jsonl` entries that followed this citation in the source
+    # (continuation text or an editorial aside), and the "see also" target of
+    # any cross-reference drawn from this citation's back-reference. Public
+    # domain -- always populated, no gating.
+    notes: list[str] = Field(default_factory=list)
+    see_also: Optional[str] = None
 
 
 class CitationsResponse(BaseModel):
     total: int
     items: list[WattersCitation]
+
+
+class WattersFrontMatter(BaseModel):
+    id: str
+    headings: list[str]
+    paragraphs: list[str]
+    word_count: int
+
+
+class WattersBackMatter(BaseModel):
+    id: str
+    content_type: str
+    headings: list[str]
+    paragraphs: list[str]
+    note: str
+
+
+class WattersEditorialNote(BaseModel):
+    id: str
+    kind: str  # "page_marker" | "editorial"
+    page: Optional[int] = None
+    text: str
+
+
+class WattersCrossReference(BaseModel):
+    id: str
+    kind: str
+    from_chapter_n: int
+    from_topic_path: list[str]
+    to_topic_raw: Optional[str] = None
+    from_citation_id: Optional[str] = None
 
 
 # --- source table of contents -----------------------------------------------
@@ -480,12 +565,23 @@ class TocItem(BaseModel):
     id: str
     title: Optional[str] = None
     ref_display: str
+    page: Optional[int] = None
 
 
 class TocSubsection(BaseModel):
     id: str
     label: str
     items: list[TocItem] = Field(default_factory=list)
+    # Watters' topics nest a subtopic level under a topic (chapter -> topic ->
+    # subtopic -> passages); Parks/Lockyer never populate this.
+    children: list["TocSubsection"] = Field(default_factory=list)
+    # Set only for a Lockyer book with no recorded prayers: `items` is empty,
+    # but the book itself still has an introduction worth reading (see
+    # `/sources/lockyer1959/book-sections/{id}`).
+    book_section_id: Optional[str] = None
+
+
+TocSubsection.model_rebuild()
 
 
 class TocSection(BaseModel):
