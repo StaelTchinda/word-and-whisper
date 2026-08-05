@@ -9,7 +9,7 @@ another stage's internals.
 The response models mirror docs/PRODUCT_BOOK.md section 6 field for field. Changing
 them is a breaking change for the benchmark harness as well as for callers.
 """
-from typing import Literal, Optional
+from typing import Annotated, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -302,3 +302,167 @@ class HealthResponse(BaseModel):
     prayers: int
     passages: int
     detail: Optional[str] = None
+
+
+# --- source browsing (not part of the section 6 contract) ------------------
+#
+# Read-only browse/search surface over each raw extracted source
+# (data/build/datasets/sources/<source_id>/), loaded and served independently
+# of the Corpus/retrieval pipeline above by prayer.api.sources. Not covered
+# by docs/PRODUCT_BOOK.md section 6 and not held to the same compatibility
+# bar as the models above.
+
+SourceUnit = Literal["prayer", "entry", "passage"]
+SourceLicense = Literal["proprietary", "in_copyright", "public_domain"]
+
+
+class SourceInfo(BaseModel):
+    id: str
+    display_name: str
+    unit: SourceUnit
+    record_count: int
+    license: SourceLicense
+    text_includable: bool
+    status: Literal["ok", "unavailable"]
+    detail: Optional[str] = None
+
+
+class SourcesResponse(BaseModel):
+    sources: list[SourceInfo]
+
+
+class SourceRefStart(BaseModel):
+    chapter: int
+    verse: Optional[int] = None  # null for chapter-level refs (lockyer)
+
+
+class SourceRef(BaseModel):
+    """Common ref shape across the three sources' differing refs[] schemas."""
+    model_config = ConfigDict(extra="ignore")
+
+    osis: str
+    book: str
+    book_name: str
+    canon: CanonSection
+    start: SourceRefStart
+    end: SourceRefStart
+    raw: str
+    role: Optional[str] = None
+    granularity: Optional[str] = None
+    verse_only: Optional[bool] = None
+    unresolved: Optional[bool] = None
+
+
+class SourceItemSummary(BaseModel):
+    id: str
+    source_id: str
+    unit: SourceUnit
+    title: Optional[str] = None
+    primary_ref: Optional[str] = None
+    ref_display: str
+    canon_section: Optional[CanonSection] = None
+    labels: list[str] = Field(default_factory=list)
+
+
+class SearchResponse(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    items: list[SourceItemSummary]
+
+
+class ParksItemDetail(BaseModel):
+    source_id: Literal["parks2021"] = "parks2021"
+    id: str
+    unit: Literal["prayer"] = "prayer"
+    title: str
+    slug: str
+    canon_section: CanonSection
+    refs: list[SourceRef]
+    primary_ref: str
+    verse_count: Optional[int] = None
+    speaker: Speaker
+    addressee: Addressee
+    context: str
+    contents: list[str] = Field(default_factory=list)
+    places: list[str] = Field(default_factory=list)
+    related_pericopes: list[str] = Field(default_factory=list)
+
+
+class LockyerScriptureQuote(BaseModel):
+    position: int
+    text: str
+    attribution_raw: str
+    osis: str
+    translation: Literal["KJV"] = "KJV"
+
+
+class LockyerItemDetail(BaseModel):
+    """Allowlist only. `exposition`, `poetry`, and `derived.application_sentences`
+    are in-copyright (c. 1959 Zondervan) and must never be added here or
+    indexed for `q` search -- see docs/datasets.md licensing section."""
+    source_id: Literal["lockyer1959"] = "lockyer1959"
+    id: str
+    unit: Literal["entry"] = "entry"
+    entry_type: str
+    title: str
+    title_raw: str
+    slug: str
+    canon_section: CanonSection
+    book_section: str
+    refs: list[SourceRef]
+    primary_ref: Optional[str] = None
+    ref_raw: Optional[str] = None
+    scripture_quotes: list[LockyerScriptureQuote] = Field(default_factory=list)
+    has_exposition: bool
+    has_poetry: bool
+    exposition_paragraph_count: int
+
+
+class WattersTopicTag(BaseModel):
+    chapter_n: int
+    path: str
+    facet: str
+
+
+class WattersPassageDetail(BaseModel):
+    source_id: Literal["watters1883"] = "watters1883"
+    id: str
+    unit: Literal["passage"] = "passage"
+    osis: str
+    book: str
+    canon_section: Optional[CanonSection] = None
+    text: Optional[str] = None
+    text_is_exact: bool
+    text_reason: Optional[str] = None
+    translation: Literal["KJV"] = "KJV"
+    n_citations: int
+    citation_ids: list[str] = Field(default_factory=list)
+    topics: list[WattersTopicTag] = Field(default_factory=list)
+    facets: list[str] = Field(default_factory=list)
+
+
+SourceItemDetail = Annotated[
+    Union[ParksItemDetail, LockyerItemDetail, WattersPassageDetail],
+    Field(discriminator="source_id"),
+]
+
+
+class WattersCitation(BaseModel):
+    id: str
+    chapter_n: int
+    chapter_title: str
+    facet: str
+    topic: Optional[str] = None
+    subtopic: Optional[str] = None
+    ref_raw: str
+    primary_ref: str
+    text: Optional[str] = None
+    translation: Literal["KJV"] = "KJV"
+    text_source: str
+    page: Optional[int] = None
+
+
+class CitationsResponse(BaseModel):
+    total: int
+    items: list[WattersCitation]

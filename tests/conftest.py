@@ -26,6 +26,12 @@ def corpus(settings):
 
 
 @pytest.fixture(scope="session")
+def sources_store(settings):
+    from prayer.api.sources import load_sources
+    return load_sources(settings.sources_dir)
+
+
+@pytest.fixture(scope="session")
 def client():
     from fastapi.testclient import TestClient
     from prayer.api.app import app
