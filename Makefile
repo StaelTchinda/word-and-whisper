@@ -14,7 +14,7 @@ help:
 install:  ## install the package and its runtime dependencies
 	$(PY) -m pip install -e .[dev]
 
-fetch:  ## download the cleaned source markdown into data/input/
+fetch:  ## download the source markdown (.zip or .tar.gz) into data/input/
 	@$(PY) -m prayer.extract.fetch
 
 data:  ## build the datasets from data/input/ (stdlib only, ~1s)

@@ -18,6 +18,7 @@ import sys
 import tarfile
 import urllib.parse
 import urllib.request
+import zipfile
 from pathlib import Path
 
 
@@ -43,8 +44,60 @@ class _StripAuthOnCrossHostRedirect(urllib.request.HTTPRedirectHandler):
         return new
 
 
+def _top_levels(names: list[str]) -> list[str]:
+    # `tar -czf - -C dir .` names entries "./parks2021/x.md", and macOS adds
+    # AppleDouble "._" siblings; neither belongs in the summary line.
+    tops = set()
+    for name in names:
+        head = name.removeprefix("./").split("/")[0]
+        if head and head != "." and not head.startswith("._"):
+            tops.add(head)
+    return sorted(tops)
+
+
+def _guard(dest: Path, names: list[str]) -> None:
+    """Refuse any entry that would write outside `dest`.
+
+    An archive is free to name `../../etc/passwd` — the zip form of this even
+    has a name, "zip slip". Checked identically for both formats.
+    """
+    root = dest.resolve()
+    for name in names:
+        if not (dest / name).resolve().is_relative_to(root):
+            raise ValueError(f"archive entry escapes {dest}: {name!r}")
+
+
+def extract(payload: bytes, dest: Path) -> list[str]:
+    """Unpack a .zip or .tar.gz into `dest`. Returns the top-level names.
+
+    The format is sniffed from the magic bytes rather than the URL, because a
+    download link often carries no usable extension — Google Drive serves
+    `uc?export=download&id=…`, for one.
+    """
+    dest.mkdir(parents=True, exist_ok=True)
+    buf = io.BytesIO(payload)
+
+    if payload[:4] in (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08"):
+        with zipfile.ZipFile(buf) as zf:
+            names = zf.namelist()
+            _guard(dest, names)
+            zf.extractall(dest)
+        return _top_levels(names)
+
+    if payload[:2] == b"\x1f\x8b" or payload[257:262] == b"ustar":
+        with tarfile.open(fileobj=buf) as tar:
+            names = [m.name for m in tar.getmembers()]
+            _guard(dest, names)
+            tar.extractall(dest)
+        return _top_levels(names)
+
+    raise ValueError("downloaded data is neither a .zip nor a .tar.gz "
+                     f"(starts with {payload[:8]!r}) — check the URL serves the "
+                     "file itself rather than an HTML download page")
+
+
 def fetch(url: str, dest: Path, token: str = "", timeout: int = 120) -> list[str]:
-    """Fetch a tar.gz and extract it into `dest`. Returns the top-level names."""
+    """Fetch a .zip or .tar.gz archive and extract it into `dest`."""
     headers = {"User-Agent": "word-and-whisper/0.1"}
     if token:
         # Both are needed for a GitHub release asset: the bearer authorises the
@@ -57,24 +110,7 @@ def fetch(url: str, dest: Path, token: str = "", timeout: int = 120) -> list[str
     with opener.open(req, timeout=timeout) as resp:
         payload = resp.read()
 
-    dest.mkdir(parents=True, exist_ok=True)
-    with tarfile.open(fileobj=io.BytesIO(payload)) as tar:
-        members = tar.getmembers()
-        for m in members:
-            # A tar entry is free to name ../../etc/passwd; refuse anything that
-            # would land outside dest.
-            target = (dest / m.name).resolve()
-            if not target.is_relative_to(dest.resolve()):
-                raise ValueError(f"archive entry escapes {dest}: {m.name!r}")
-        tar.extractall(dest)
-    # `tar -czf - -C dir .` names entries "./parks2021/x.md", and macOS adds
-    # AppleDouble "._" siblings; neither belongs in the summary line.
-    tops = set()
-    for m in members:
-        head = m.name.removeprefix("./").split("/")[0]
-        if head and head != "." and not head.startswith("._"):
-            tops.add(head)
-    return sorted(tops)
+    return extract(payload, dest)
 
 
 def main(argv=None) -> int:
@@ -88,8 +124,9 @@ def main(argv=None) -> int:
     if not args.url:
         print("PRAYER_DATA_URL is not set.\n"
               "The source books are copyrighted and are not in this repository.\n"
-              "Point it at a tar.gz of data/input/, and set PRAYER_DATA_TOKEN\n"
-              "as well when that URL needs authentication.", file=sys.stderr)
+              "Point it at a .zip or .tar.gz of data/input/, and set\n"
+              "PRAYER_DATA_TOKEN as well when that URL needs authentication.",
+              file=sys.stderr)
         return 1
 
     dest = args.dest
@@ -101,9 +138,12 @@ def main(argv=None) -> int:
         names = fetch(args.url, dest, args.token)
     except Exception as exc:                       # noqa: BLE001 - reported, not swallowed
         print(f"fetch failed: {type(exc).__name__}: {exc}", file=sys.stderr)
-        if not args.token:
-            print("hint: no token was supplied; a private URL needs "
-                  "PRAYER_DATA_TOKEN", file=sys.stderr)
+        # Only suggest the token when the server actually refused us. A bad
+        # archive is a wrong-link problem, and the hint would misdirect.
+        refused = getattr(exc, "code", None) in (401, 403, 404)
+        if refused and not args.token:
+            print("hint: no token was supplied; a URL behind authentication "
+                  "needs PRAYER_DATA_TOKEN", file=sys.stderr)
         return 1
     print(f"input: {' '.join(names)}")
     return 0

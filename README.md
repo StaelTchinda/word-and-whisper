@@ -172,7 +172,7 @@ commit SHA, which a deploy hook cannot.
 
 | Where | Name | Kind |
 | --- | --- | --- |
-| GitHub repo secret | `PRAYER_DATA_URL` | tar.gz of `data/input/` |
+| GitHub repo secret | `PRAYER_DATA_URL` | direct-download link to a `.zip` (or `.tar.gz`) of `data/input/` |
 | GitHub repo secret | `PRAYER_DATA_TOKEN` | *optional* — only if that URL needs auth; leave unset for a plain link |
 | GitHub environment `production` | `RENDER_API_KEY` | Render API key |
 | GitHub repo variable | `RENDER_SERVICE_ID` | `srv-…` |

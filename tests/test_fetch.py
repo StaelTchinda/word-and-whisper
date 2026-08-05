@@ -8,14 +8,17 @@ import io
 import tarfile
 import urllib.error
 import urllib.request
-from pathlib import Path
+import zipfile
 
 import pytest
 
-from prayer.extract.fetch import _StripAuthOnCrossHostRedirect, fetch, main
+from prayer.extract.fetch import (_StripAuthOnCrossHostRedirect, extract, fetch,
+                                  main)
+
+NAMES = ("parks2021/a.md", "lockyer1959/b.md")
 
 
-def _archive(names=("parks2021/a.md", "lockyer1959/b.md")) -> bytes:
+def _targz(names=NAMES) -> bytes:
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
         for name in names:
@@ -26,9 +29,41 @@ def _archive(names=("parks2021/a.md", "lockyer1959/b.md")) -> bytes:
     return buf.getvalue()
 
 
+def _zip(names=NAMES) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        for name in names:
+            zf.writestr(name, "# hello\n")
+    return buf.getvalue()
+
+
+# Both formats must behave identically; the URL often has no usable extension,
+# so the format is sniffed from the bytes.
+ARCHIVES = pytest.mark.parametrize("build", [_targz, _zip], ids=["tar.gz", "zip"])
+
+
+@ARCHIVES
+def test_extract_handles_both_formats(tmp_path, build):
+    names = extract(build(), tmp_path)
+    assert names == ["lockyer1959", "parks2021"]
+    assert (tmp_path / "parks2021/a.md").read_text() == "# hello\n"
+
+
+@ARCHIVES
+def test_extract_refuses_an_entry_that_escapes(tmp_path, build):
+    with pytest.raises(ValueError, match="escapes"):
+        extract(build(("../escape.md",)), tmp_path)
+    assert not (tmp_path.parent / "escape.md").exists()
+
+
+def test_extract_rejects_something_that_is_neither(tmp_path):
+    with pytest.raises(ValueError, match="neither a .zip nor a .tar.gz"):
+        extract(b"<!doctype html><title>Download</title>", tmp_path)
+
+
 @pytest.fixture
 def served(monkeypatch):
-    """Capture the request urllib would send, and reply with a tar.gz."""
+    """Capture the request urllib would send, and reply with an archive."""
     seen = {}
 
     class _Resp(io.BytesIO):
@@ -41,7 +76,7 @@ def served(monkeypatch):
     def fake_open(self, req, timeout=None):
         seen["url"] = req.full_url
         seen["headers"] = {k.lower(): v for k, v in req.headers.items()}
-        return _Resp(_archive())
+        return _Resp(_targz())
 
     monkeypatch.setattr(urllib.request.OpenerDirector, "open", fake_open)
     return seen
@@ -89,21 +124,6 @@ def test_auth_survives_a_same_host_redirect():
     assert any(k.lower() == "authorization" for k in new.headers)
 
 
-def test_refuses_an_archive_that_escapes_dest(tmp_path, monkeypatch):
-    class _Resp(io.BytesIO):
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-    monkeypatch.setattr(urllib.request.OpenerDirector, "open",
-                        lambda self, req, timeout=None: _Resp(_archive(("../escape.md",))))
-    with pytest.raises(ValueError, match="escapes"):
-        fetch("https://example.invalid/x.tar.gz", tmp_path)
-    assert not (tmp_path.parent / "escape.md").exists()
-
-
 def test_main_without_a_url_explains_itself(capsys, monkeypatch):
     monkeypatch.delenv("PRAYER_DATA_URL", raising=False)
     assert main([]) == 1
@@ -112,12 +132,30 @@ def test_main_without_a_url_explains_itself(capsys, monkeypatch):
     assert "copyrighted" in err
 
 
-def test_main_hints_at_the_token_when_a_private_fetch_fails(capsys, monkeypatch, tmp_path):
+def test_main_hints_at_the_token_when_the_server_refuses(capsys, monkeypatch, tmp_path):
     def boom(self, req, timeout=None):
         raise urllib.error.HTTPError(req.full_url, 404, "Not Found", {}, None)
 
     monkeypatch.setattr(urllib.request.OpenerDirector, "open", boom)
-    assert main(["https://example.invalid/x.tar.gz", "--dest", str(tmp_path)]) == 1
+    assert main(["https://example.invalid/x.zip", "--dest", str(tmp_path)]) == 1
     err = capsys.readouterr().err
     assert "fetch failed" in err
     assert "PRAYER_DATA_TOKEN" in err
+
+
+def test_main_does_not_blame_the_token_for_a_wrong_link(capsys, monkeypatch, tmp_path):
+    """A share URL that serves its HTML download page is the likeliest mistake
+    (Dropbox ?dl=0, a Drive interstitial). Pointing at auth would misdirect."""
+    class _Resp(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr(urllib.request.OpenerDirector, "open",
+                        lambda self, req, timeout=None: _Resp(b"<!doctype html>"))
+    assert main(["https://example.invalid/x.zip", "--dest", str(tmp_path)]) == 1
+    err = capsys.readouterr().err
+    assert "neither a .zip nor a .tar.gz" in err
+    assert "PRAYER_DATA_TOKEN" not in err
