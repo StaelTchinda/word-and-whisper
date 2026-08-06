@@ -33,6 +33,40 @@ def test_unknown_source_404s(client):
     assert client.get("/sources/nope/items/x").status_code == 404
 
 
+# --- GET /sources/search: one query across all three sources --------------
+
+def test_global_search_finds_hits_in_every_source(client):
+    """'search' must resolve to search_all, not fall through to the
+    /{source_id} catch-all -- see the declaration-order comment above
+    search_all in prayer.api.sources."""
+    body = client.get("/sources/search", params={"q": "moses"}).json()
+    assert body["q"] == "moses"
+    assert body["total"] > 0
+    assert body["items"]
+    seen_sources = {item["source_id"] for item in body["items"]}
+    assert seen_sources <= {"parks2021", "lockyer1959", "watters1883"}
+    for item in body["items"]:
+        assert item["matched_on"]
+        assert item["snippet"]
+        assert item["ref_display"]
+
+
+def test_global_search_respects_limit_but_reports_true_total(client):
+    body = client.get("/sources/search", params={"q": "prayer", "limit": 5}).json()
+    assert len(body["items"]) == 5
+    assert body["total"] >= 5
+
+
+def test_global_search_requires_a_query(client):
+    assert client.get("/sources/search").status_code == 422
+
+
+def test_global_search_no_match_is_empty_not_error(client):
+    body = client.get("/sources/search", params={"q": "zzzznotarealword"}).json()
+    assert body["total"] == 0
+    assert body["items"] == []
+
+
 # --- redaction (F1): copyright gating on lockyer1959's own prose ------------
 #
 # `exposition`/`poetry`/`application_sentences` are in copyright (c. 1959
@@ -334,6 +368,38 @@ def test_watters_editorial_notes_include_page_markers(client):
                        params={"kind": "page_marker"}).json()
     assert notes
     assert all(n["kind"] == "page_marker" and n["page"] for n in notes)
+
+
+def test_watters_chapter_reads_as_one_page(client):
+    """A whole Watters chapter is the source's real reading unit -- this is
+    the same chapter -> topic -> subtopic shape the TOC nests, but with every
+    citation's text inlined instead of one link per passage, so a chapter
+    opens and reads as one page. See prayer.api.sources._build_watters_chapter."""
+    body = client.get("/sources/watters1883/chapters/1").json()
+    assert body["chapter_n"] == 1
+    assert body["title"] == "Who Prayed"
+    assert body["n_citations"] > 0
+    assert body["topics"]
+
+    n_seen = 0
+    for topic in body["topics"]:
+        assert topic["label"]
+        for c in topic["citations"]:
+            assert c["chapter_n"] == 1
+            assert c["text"]
+            n_seen += 1
+        for sub in topic["subtopics"]:
+            assert sub["label"]
+            for c in sub["citations"]:
+                assert c["chapter_n"] == 1
+                assert c["text"]
+                n_seen += 1
+    assert n_seen == body["n_citations"]
+
+
+def test_unknown_watters_chapter_404s(client):
+    resp = client.get("/sources/watters1883/chapters/999")
+    assert resp.status_code == 404
 
 
 def test_watters_citation_carries_inline_notes_and_see_also(client):

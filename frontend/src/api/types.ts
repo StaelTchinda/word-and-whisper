@@ -21,6 +21,23 @@ export interface SourcesResponse {
   sources: SourceInfo[]
 }
 
+// One query across all three sources at once -- see GET /sources/search.
+export interface GlobalSearchResult {
+  id: string
+  source_id: string
+  unit: SourceUnit
+  title: string | null
+  ref_display: string
+  snippet: string
+  matched_on: string
+}
+
+export interface GlobalSearchResponse {
+  q: string
+  total: number
+  items: GlobalSearchResult[]
+}
+
 export interface SourceRefStart {
   chapter: number
   verse: number | null
@@ -189,6 +206,31 @@ export interface WattersCitation {
 export interface CitationsResponse {
   total: number
   items: WattersCitation[]
+}
+
+// Whole-chapter reading view -- the same chapter -> topic -> subtopic shape
+// TocSection/TocSubsection nest below, but with each citation's text inlined
+// instead of a link per passage, so a chapter (Watters' own reading unit)
+// opens and reads as one page.
+export interface WattersChapterSubtopic {
+  id: string
+  label: string
+  citations: WattersCitation[]
+}
+
+export interface WattersChapterTopic {
+  id: string
+  label: string
+  citations: WattersCitation[]
+  subtopics: WattersChapterSubtopic[]
+}
+
+export interface WattersChapterDetail {
+  chapter_n: number
+  title: string
+  roman: string | null
+  n_citations: number
+  topics: WattersChapterTopic[]
 }
 
 export interface WattersFrontMatter {

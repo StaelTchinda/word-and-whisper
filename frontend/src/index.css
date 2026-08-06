@@ -13,6 +13,17 @@
   --badge-copyright-bg: rgba(154, 90, 18, 0.1);
   --badge-proprietary: #8a3b3b;
   --badge-proprietary-bg: rgba(138, 59, 59, 0.1);
+  /* Speaker/addressee/occasion facet accents (Parks reader, search badges) --
+     kept out of the theme-chip palette below deliberately: three singular
+     facts about a prayer earn a color each, but themes are multi-valued and
+     used for browsing, so they stay neutral instead of turning into a
+     rainbow of chips. */
+  --speaker: #8a5a2b;
+  --speaker-bg: rgba(138, 90, 43, 0.1);
+  --addressee: #7d4f72;
+  --addressee-bg: rgba(125, 79, 114, 0.1);
+  --occasion: #3f7268;
+  --occasion-bg: rgba(63, 114, 104, 0.1);
   --shadow: rgba(40, 30, 10, 0.08) 0 1px 3px, rgba(40, 30, 10, 0.06) 0 8px 20px -6px;
 
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
@@ -41,6 +52,12 @@
     --badge-copyright-bg: rgba(226, 169, 92, 0.14);
     --badge-proprietary: #e08a8a;
     --badge-proprietary-bg: rgba(224, 138, 138, 0.14);
+    --speaker: #d9a86c;
+    --speaker-bg: rgba(217, 168, 108, 0.14);
+    --addressee: #d497c4;
+    --addressee-bg: rgba(212, 151, 196, 0.14);
+    --occasion: #7fc4b5;
+    --occasion-bg: rgba(127, 196, 181, 0.14);
     --shadow: rgba(0, 0, 0, 0.4) 0 1px 3px, rgba(0, 0, 0, 0.3) 0 8px 20px -6px;
   }
 }
@@ -113,6 +130,28 @@ button {
   font-size: 1.1rem;
   color: var(--text);
   text-decoration: none;
+}
+
+.topbar-search {
+  margin-left: auto;
+  width: 100%;
+  max-width: 22em;
+}
+
+.topbar-search input {
+  width: 100%;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+  outline: none;
+}
+
+.topbar-search input:focus {
+  border-color: var(--accent);
 }
 
 .container {
@@ -250,6 +289,39 @@ button {
   gap: 1rem;
   margin-top: 0.5rem;
   font-size: 0.88rem;
+}
+
+.toc-filter-box {
+  margin-bottom: 1rem;
+}
+
+.toc-filter-box input {
+  width: 100%;
+  font: inherit;
+  font-size: 0.92rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.55rem 0.9rem;
+  outline: none;
+}
+
+.toc-filter-box input:focus {
+  border-color: var(--accent);
+}
+
+.result-count {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin: -0.4rem 0 0.8rem;
+}
+
+mark {
+  background: var(--accent-bg);
+  color: var(--accent-strong);
+  border-radius: 3px;
+  padding: 0 1px;
 }
 
 .toc-matter-links a {
@@ -396,15 +468,67 @@ button {
   margin: 0 0 1.1em;
 }
 
-.reader-labels {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  justify-content: center;
-  margin: 0.75rem 0 0;
+/* Table-like two-column layout (label, value) with no visible cell borders
+   -- CSS grid on the group, `display: contents` on each row so its label
+   and value become that grid's actual column cells instead of nesting a
+   separate flex box per row, which is what let the label column line up. */
+.facet-groups {
+  display: grid;
+  grid-template-columns: max-content auto;
+  column-gap: 0.9rem;
+  row-gap: 0.55rem;
+  align-items: baseline;
+  margin: 1rem 0 0;
+  padding-bottom: 1.75rem;
 }
 
-.tag {
+.facet-row {
+  display: contents;
+  font-family: var(--sans);
+}
+
+.facet-row .flabel {
+  text-align: left;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.facet-row .facet-val {
+  text-align: left;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.facet-speaker .flabel,
+.facet-speaker .facet-val {
+  color: var(--speaker);
+}
+
+.facet-addressee .flabel,
+.facet-addressee .facet-val {
+  color: var(--addressee);
+}
+
+.facet-occasion .flabel {
+  color: var(--occasion);
+}
+
+.facet-occasion .facet-val {
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.theme-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.theme-chip {
   font-size: 0.78rem;
   color: var(--text-muted);
   background: var(--surface);
@@ -439,6 +563,36 @@ button {
   color: var(--text-muted);
   text-align: right;
   margin-top: 0.35em;
+}
+
+/* --- watters: whole-chapter reading view --------------------------------- */
+
+.chapter-topic {
+  margin-top: 2.4rem;
+  padding-top: 1.6rem;
+  border-top: 1px solid var(--border);
+}
+
+.chapter-topic:first-of-type {
+  margin-top: 1.5rem;
+  padding-top: 0;
+  border-top: none;
+}
+
+.chapter-topic h2 {
+  font-size: 1.2rem;
+}
+
+.chapter-subtopic {
+  margin-top: 1.5rem;
+}
+
+.chapter-subtopic h3 {
+  font-family: var(--sans);
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 0.7rem;
 }
 
 .citation-list {
@@ -523,6 +677,108 @@ button {
 .reader-nav .disabled {
   color: var(--border);
   pointer-events: none;
+}
+
+/* --- cross-source search -------------------------------------------------- */
+
+.gs-input-row {
+  margin-bottom: 1.2rem;
+}
+
+.gs-input-row input {
+  width: 100%;
+  font: inherit;
+  font-size: 1rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1.5px solid var(--accent);
+  border-radius: 8px;
+  padding: 0.65rem 1rem;
+  outline: none;
+  box-shadow: var(--shadow);
+}
+
+.gs-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.gs-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.9rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.gs-result:last-child {
+  border-bottom: none;
+}
+
+.gs-top {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.gs-title {
+  font-family: var(--serif);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.gs-title:hover {
+  color: var(--accent);
+}
+
+.gs-ref {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.gs-snippet {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.gs-match {
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.gs-match b {
+  color: var(--text);
+}
+
+.src-badge {
+  font: 700 0.62rem/1 var(--sans);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.16rem 0.45rem;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.src-badge-parks2021 {
+  color: var(--speaker);
+  background: var(--speaker-bg);
+}
+
+.src-badge-lockyer1959 {
+  color: var(--occasion);
+  background: var(--occasion-bg);
+}
+
+.src-badge-watters1883 {
+  color: var(--addressee);
+  background: var(--addressee-bg);
 }
 
 /* --- states -------------------------------------------------------------- */

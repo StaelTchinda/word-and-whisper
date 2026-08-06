@@ -17,15 +17,33 @@ export function ParksBody({
 }) {
   return (
     <>
-      <div className="reader-labels">
-        <span className="tag">{item.speaker.raw}</span>
-        {item.addressee.raw && <span className="tag">to {item.addressee.raw}</span>}
-        <span className="tag">{item.context}</span>
-        {item.contents.map((c) => (
-          <span className="tag" key={c}>
-            {c}
-          </span>
-        ))}
+      <div className="facet-groups">
+        <div className="facet-row facet-speaker">
+          <span className="flabel">Speaker</span>
+          <span className="facet-val">{item.speaker.raw}</span>
+        </div>
+        {item.addressee.raw && (
+          <div className="facet-row facet-addressee">
+            <span className="flabel">To</span>
+            <span className="facet-val">{item.addressee.raw}</span>
+          </div>
+        )}
+        <div className="facet-row facet-occasion">
+          <span className="flabel">Occasion</span>
+          <span className="facet-val">{item.context}</span>
+        </div>
+        {item.contents.length > 0 && (
+          <div className="facet-row facet-themes">
+            <span className="flabel">Themes</span>
+            <div className="theme-chips">
+              {item.contents.map((c) => (
+                <span className="theme-chip" key={c}>
+                  {c}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="reader-body">
@@ -128,6 +146,37 @@ function CitationNotes({ citation }: { citation: WattersCitation }) {
   )
 }
 
+// `showContext` includes the chapter/topic/subtopic prefix on the meta line;
+// the single-passage view (WattersBody, below) needs it since a citation
+// there is read out of context, but a chapter/topic reading view
+// (WattersChapterPage) already shows that same context as a heading, so it
+// passes false to avoid repeating it on every citation.
+export function CitationEntry({
+  citation,
+  showContext,
+}: {
+  citation: WattersCitation
+  showContext: boolean
+}) {
+  return (
+    <li>
+      <div className="citation-meta">
+        {showContext && (
+          <>
+            Ch. {citation.chapter_n} · {citation.chapter_title}
+            {citation.topic ? ` · ${citation.topic}` : ''}
+            {citation.subtopic ? ` · ${citation.subtopic}` : ''} ·{' '}
+          </>
+        )}
+        {citation.ref_raw}
+        {citation.page ? ` · p. ${citation.page}` : ''}
+      </div>
+      <div className="reader-body">{citation.text}</div>
+      <CitationNotes citation={citation} />
+    </li>
+  )
+}
+
 export function WattersBody({
   item,
   citations,
@@ -155,16 +204,7 @@ export function WattersBody({
       {citations && (
         <ul className="citation-list">
           {citations.map((c) => (
-            <li key={c.id}>
-              <div className="citation-meta">
-                Ch. {c.chapter_n} · {c.chapter_title}
-                {c.topic ? ` · ${c.topic}` : ''}
-                {c.subtopic ? ` · ${c.subtopic}` : ''} · {c.ref_raw}
-                {c.page ? ` · p. ${c.page}` : ''}
-              </div>
-              <div className="reader-body">{c.text}</div>
-              <CitationNotes citation={c} />
-            </li>
+            <CitationEntry citation={c} showContext key={c.id} />
           ))}
         </ul>
       )}

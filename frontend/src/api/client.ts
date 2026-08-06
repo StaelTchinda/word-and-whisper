@@ -1,5 +1,6 @@
 import type {
   CitationsResponse,
+  GlobalSearchResponse,
   LockyerBookSection,
   LockyerBookSectionsResponse,
   PrayerDetail,
@@ -7,6 +8,7 @@ import type {
   SourcesResponse,
   TocResponse,
   WattersBackMatter,
+  WattersChapterDetail,
   WattersCrossReference,
   WattersEditorialNote,
   WattersFrontMatter,
@@ -34,6 +36,10 @@ export function listSources(): Promise<SourcesResponse> {
   return getJson('/sources')
 }
 
+export function searchAll(q: string): Promise<GlobalSearchResponse> {
+  return getJson(`/sources/search?q=${encodeURIComponent(q)}`)
+}
+
 export function getToc(sourceId: string): Promise<TocResponse> {
   return getJson(`/sources/${sourceId}/toc`)
 }
@@ -44,6 +50,10 @@ export function getSourceItem(sourceId: string, itemId: string): Promise<SourceI
 
 export function getWattersCitations(itemId: string): Promise<CitationsResponse> {
   return getJson(`/sources/watters1883/items/${itemId}/citations`)
+}
+
+export function getWattersChapter(chapterN: number): Promise<WattersChapterDetail> {
+  return getJson(`/sources/watters1883/chapters/${chapterN}`)
 }
 
 export function listLockyerBookSections(): Promise<LockyerBookSectionsResponse> {

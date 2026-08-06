@@ -1,6 +1,8 @@
 import { Link, useParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
-import { getLockyerBookSection } from '../api/client'
+import { getLockyerBookSection, getToc } from '../api/client'
+import { lockyerReadingOrder } from '../toc'
+import { ReaderNav, type NavStop } from '../components/ReaderNav'
 
 export default function BookSectionPage() {
   const { sectionId } = useParams<{ sectionId: string }>()
@@ -10,6 +12,10 @@ export default function BookSectionPage() {
     queryFn: () => getLockyerBookSection(sectionId!),
     enabled: !!sectionId,
   })
+  // Shares the query-cache entry SourceTocPage already populated when a
+  // reader arrived here from the table of contents, so this is usually free
+  // -- only needed for the book-to-book Prev/Next below.
+  const tocQuery = useQuery({ queryKey: ['toc', 'lockyer1959'], queryFn: () => getToc('lockyer1959') })
 
   if (query.isLoading) {
     return (
@@ -27,6 +33,22 @@ export default function BookSectionPage() {
   }
 
   const section = query.data
+
+  // "Next" from a book's introduction goes to that book's own first entry,
+  // not straight to the next book's introduction (and the reverse for
+  // "Prev") -- see lockyerReadingOrder. A book with zero recorded prayers
+  // has no entry to land on, so its neighbor is the adjacent book's intro
+  // instead.
+  const order = tocQuery.data ? lockyerReadingOrder(tocQuery.data) : []
+  const index = order.findIndex((e) => e.kind === 'intro' && e.id === sectionId)
+  const toNavStop = (id: string, kind: 'entry' | 'intro', label: string): NavStop => ({
+    href: kind === 'intro' ? `/sources/lockyer1959/book-sections/${id}` : `/sources/lockyer1959/${id}`,
+    label,
+  })
+  const prevEntity = index > 0 ? order[index - 1] : undefined
+  const nextEntity = index >= 0 && index < order.length - 1 ? order[index + 1] : undefined
+  const prev = prevEntity && toNavStop(prevEntity.id, prevEntity.kind, prevEntity.label)
+  const next = nextEntity && toNavStop(nextEntity.id, nextEntity.kind, nextEntity.label)
 
   return (
     <div className="container reader book-section-page">
@@ -85,6 +107,10 @@ export default function BookSectionPage() {
           not reproduced here — in copyright, © Zondervan 1959. Set
           PRAYER_INCLUDE_COPYRIGHTED_TEXT=true on the API to read it for personal, local use.
         </p>
+      )}
+
+      {order.length > 0 && (
+        <ReaderNav prev={prev} next={next} position={index + 1} total={order.length} />
       )}
     </div>
   )

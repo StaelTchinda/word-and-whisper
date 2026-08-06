@@ -24,6 +24,7 @@ from typing import Callable, Optional
 from fastapi import APIRouter, HTTPException, Query
 
 from prayer.api.models import (CanonSection, CitationsResponse,
+                        GlobalSearchResponse, GlobalSearchResult,
                         LockyerBookSection, LockyerBookSectionsResponse,
                         LockyerExposition, LockyerItemDetail,
                         LockyerOutlinePoint, LockyerPoem,
@@ -31,10 +32,11 @@ from prayer.api.models import (CanonSection, CitationsResponse,
                         SearchResponse, SourceInfo, SourceItemDetail,
                         SourceItemSummary, SourceRef, SourcesResponse,
                         TocItem, TocResponse, TocSection, TocSubsection,
-                        WattersBackMatter, WattersCitation,
-                        WattersCrossReference, WattersEditorialNote,
-                        WattersFrontMatter, WattersPassageDetail,
-                        WattersTopicTag)
+                        WattersBackMatter, WattersChapterDetail,
+                        WattersChapterSubtopic, WattersChapterTopic,
+                        WattersCitation, WattersCrossReference,
+                        WattersEditorialNote, WattersFrontMatter,
+                        WattersPassageDetail, WattersTopicTag)
 from prayer.refs.bible_books import BOOKS
 
 log = logging.getLogger("prayer.api.sources")
@@ -227,6 +229,11 @@ def _load_watters(source_dir: Path, include_copyrighted: bool) -> tuple[list[Wat
 
     return items, citations_by_passage, {
         "chapters": chapters, "topics": topics,
+        # Keyed by citation id (not passage id) so a whole chapter can be
+        # assembled straight from topics.jsonl's own citation_ids lists,
+        # without going back through the passage indirection above -- see
+        # get_watters_chapter.
+        "citations_by_id": {c["id"]: _citation(c) for c in citation_rows},
         "front_matter": front_rows[0] if front_rows else None,
         "back_matter": back_rows[0] if back_rows else None,
         "editorial_notes": editorial_notes,
@@ -289,6 +296,61 @@ def _summary(item) -> SourceItemSummary:
             id=item.id, source_id=item.source_id, unit=item.unit, title=None,
             primary_ref=item.osis, ref_display=item.osis,
             canon_section=item.canon_section, labels=list(item.facets))
+    raise TypeError(f"unhandled item type {type(item)!r}")
+
+
+# --- cross-source search -----------------------------------------------
+#
+# One query box over all three sources at once. Candidate selection reuses
+# each source's own blob() (same token-AND match search_items already does);
+# what's added here is picking which field actually matched, so the result
+# can say *why* -- "speaker", "theme", "topic" mean different things per
+# source, so a single generic snippet wouldn't be honest about the hit.
+
+def _snippet(text: str, q_tokens: list[str], width: int = 140) -> str:
+    """An excerpt of `text` centered on the first matched token, or its
+    head if nothing in `text` itself matched (the hit was in another field)."""
+    lower = text.casefold()
+    idx = next((i for tok in q_tokens if (i := lower.find(tok)) != -1), -1)
+    if idx == -1:
+        head = text[:width].strip()
+        return f"{head}…" if len(text) > width else head
+    start = max(0, idx - width // 3)
+    end = min(len(text), idx + width)
+    return f"{'…' if start > 0 else ''}{text[start:end].strip()}{'…' if end < len(text) else ''}"
+
+
+def _global_result(source_id: str, item, q_tokens: list[str]) -> GlobalSearchResult:
+    if isinstance(item, ParksItemDetail):
+        matched_on, snippet = "title", item.title
+        if any(tok in item.speaker.raw.casefold() for tok in q_tokens):
+            matched_on, snippet = "speaker", item.speaker.raw
+        elif (hit := next((c for c in item.contents if any(t in c.casefold() for t in q_tokens)), None)):
+            matched_on, snippet = "theme", hit
+        elif any(tok in item.context.casefold() for tok in q_tokens):
+            matched_on, snippet = "occasion", item.context
+        return GlobalSearchResult(
+            id=item.id, source_id=source_id, unit=item.unit, title=item.title,
+            ref_display=_ref_display(item.primary_ref, item.refs),
+            snippet=snippet, matched_on=matched_on)
+    if isinstance(item, LockyerItemDetail):
+        matched_on, snippet = "title", item.title
+        if (quote := next((q for q in item.scripture_quotes
+                           if any(t in q.text.casefold() for t in q_tokens)), None)):
+            matched_on, snippet = "scripture", _snippet(quote.text, q_tokens)
+        return GlobalSearchResult(
+            id=item.id, source_id=source_id, unit=item.unit, title=item.title,
+            ref_display=_ref_display(item.primary_ref, item.refs),
+            snippet=snippet, matched_on=matched_on)
+    if isinstance(item, WattersPassageDetail):
+        matched_on, snippet = "reference", item.osis
+        if item.text and any(tok in item.text.casefold() for tok in q_tokens):
+            matched_on, snippet = "text", _snippet(item.text, q_tokens)
+        elif (topic := next((t for t in item.topics if any(tok in t.path.casefold() for tok in q_tokens)), None)):
+            matched_on, snippet = "topic", topic.path
+        return GlobalSearchResult(
+            id=item.id, source_id=source_id, unit=item.unit, title=None,
+            ref_display=item.osis, snippet=snippet, matched_on=matched_on)
     raise TypeError(f"unhandled item type {type(item)!r}")
 
 
@@ -369,6 +431,27 @@ def list_sources() -> SourcesResponse:
     return SourcesResponse(sources=[
         _source_info(sid, store) for sid, store in sorted(_stores.items())
     ])
+
+
+# Declared ahead of the /{source_id} catch-all below so "search" is never
+# swallowed as a source_id -- FastAPI/Starlette match routes in declaration
+# order, not by specificity.
+@router.get("/search", response_model=GlobalSearchResponse)
+def search_all(
+    q: str = Query(..., min_length=1),
+    limit: int = Query(default=20, ge=1, le=50),
+) -> GlobalSearchResponse:
+    q_tokens = q.casefold().split()
+    results: list[GlobalSearchResult] = []
+    for source_id in _BLOB_BUILDERS:
+        store = _stores.get(source_id)
+        if store is None or store.status != "ok":
+            continue
+        blobs = store.blobs()
+        for item in store.items:
+            if all(tok in blobs.get(item.id, "") for tok in q_tokens):
+                results.append(_global_result(source_id, item, q_tokens))
+    return GlobalSearchResponse(q=q, total=len(results), items=results[:limit])
 
 
 @router.get("/{source_id}", response_model=SourceInfo)
@@ -513,6 +596,58 @@ def _build_toc_watters(store: SourceStore) -> list[TocSection]:
     return [TocSection(id="chapters", label="Chapters", subsections=subsections)]
 
 
+def _build_watters_chapter(store: SourceStore, chapter_n: int) -> Optional[WattersChapterDetail]:
+    """The read-a-whole-chapter counterpart to `_build_toc_watters`: same
+    chapter -> topic -> subtopic shape, but each node carries its citations'
+    full text instead of a link per passage -- see WattersChapterDetail."""
+    chapters: dict[int, dict] = store.extra.get("chapters", {})
+    if chapter_n not in chapters:
+        return None
+    chapter = chapters[chapter_n]
+    topic_rows: list[dict] = store.extra.get("topics", [])
+    citations_by_id: dict[str, WattersCitation] = store.extra.get("citations_by_id", {})
+
+    def cites(t: dict) -> list[WattersCitation]:
+        return [citations_by_id[cid] for cid in t.get("citation_ids", []) if cid in citations_by_id]
+
+    rows = [t for t in topic_rows if t["chapter_n"] == chapter_n]
+    if not rows:
+        # Fallback for an older sources.jsonl layout without topics.jsonl (see
+        # the equivalent branch in _build_toc_watters): one unordered topic
+        # holding every citation any passage of this chapter carries.
+        seen: set[str] = set()
+        flat: list[WattersCitation] = []
+        for item in store.items:
+            if any(t.chapter_n == chapter_n for t in item.topics):
+                for c in store.citations_by_passage.get(item.id, []):
+                    if c.id not in seen:
+                        seen.add(c.id)
+                        flat.append(c)
+        topics = [WattersChapterTopic(id=str(chapter_n), label=chapter["title"], citations=flat)] if flat else []
+    else:
+        level3 = [t for t in rows if t["level"] == 3]
+        level4_by_topic: dict[str, list[dict]] = defaultdict(list)
+        for t in rows:
+            if t["level"] == 4:
+                level4_by_topic[t["topic"]].append(t)
+        topics = [
+            WattersChapterTopic(
+                id=t["id"], label=t["topic"], citations=cites(t),
+                subtopics=[
+                    WattersChapterSubtopic(id=c["id"], label=c["subtopic"], citations=cites(c))
+                    for c in level4_by_topic.get(t["topic"], [])
+                ],
+            )
+            for t in level3
+        ]
+
+    n_citations = sum(len(t.citations) for t in topics) + sum(
+        len(s.citations) for t in topics for s in t.subtopics)
+    return WattersChapterDetail(
+        chapter_n=chapter_n, title=chapter["title"], roman=chapter.get("roman"),
+        n_citations=n_citations, topics=topics)
+
+
 @router.get("/{source_id}/toc", response_model=TocResponse)
 def get_toc(source_id: str) -> TocResponse:
     store = _loaded_store(source_id)
@@ -622,6 +757,19 @@ def get_watters_citations(item_id: str) -> CitationsResponse:
         raise HTTPException(404, detail=f"no item {item_id!r} in source 'watters1883'")
     citations = store.citations_by_passage.get(item_id, [])
     return CitationsResponse(total=len(citations), items=citations)
+
+
+# Whole-chapter reading view: the TOC nests chapter -> topic -> subtopic ->
+# passage links, one click per passage. This is the same shape with every
+# citation's text inlined, so a chapter -- Watters' own reading unit -- opens
+# and reads as one page. See WattersChapterDetail / _build_watters_chapter.
+@router.get("/watters1883/chapters/{chapter_n}", response_model=WattersChapterDetail)
+def get_watters_chapter(chapter_n: int) -> WattersChapterDetail:
+    store = _loaded_store("watters1883")
+    chapter = _build_watters_chapter(store, chapter_n)
+    if chapter is None:
+        raise HTTPException(404, detail=f"no chapter {chapter_n} in source 'watters1883'")
+    return chapter
 
 
 # --- lockyer1959: book introductions --------------------------------------
