@@ -371,6 +371,35 @@ class SearchResponse(BaseModel):
     items: list[SourceItemSummary]
 
 
+# --- cross-source search -----------------------------------------------
+#
+# SearchResponse above is per-source (GET /sources/{id}/items?q=). This is
+# its counterpart across all three at once -- one query box, one result list,
+# each hit labeled with which source it came from and which field matched,
+# since "speaker" and "topic" mean different things per source. See
+# prayer.api.sources.search_all.
+
+class GlobalSearchResult(BaseModel):
+    id: str
+    source_id: str
+    unit: SourceUnit
+    title: Optional[str] = None
+    ref_display: str
+    # A short excerpt containing the match, or the closest thing to one --
+    # e.g. the theme/topic string itself when the match isn't in body text.
+    snippet: str
+    # Human-readable label for *why* this hit matched: "speaker", "theme",
+    # "occasion", "title", "scripture", "topic", "text" -- source-specific,
+    # deliberately not an enum, since each source's fields differ.
+    matched_on: str
+
+
+class GlobalSearchResponse(BaseModel):
+    q: str
+    total: int
+    items: list[GlobalSearchResult]
+
+
 class ParksItemDetail(BaseModel):
     source_id: Literal["parks2021"] = "parks2021"
     id: str
@@ -520,6 +549,35 @@ class WattersCitation(BaseModel):
 class CitationsResponse(BaseModel):
     total: int
     items: list[WattersCitation]
+
+
+# --- watters1883: whole-chapter reading view --------------------------------
+#
+# The TOC (`TocSection`/`TocSubsection` below) nests chapter -> topic ->
+# subtopic -> passage *links*, one click per passage. This mirrors the same
+# chapter -> topic -> subtopic shape but inlines each citation's full text, so
+# a whole chapter (Watters' real unit of reading -- "Who Prayed", "The Duty of
+# Prayer", ...) can be read in one page instead of one passage at a time.
+
+class WattersChapterSubtopic(BaseModel):
+    id: str
+    label: str
+    citations: list[WattersCitation] = Field(default_factory=list)
+
+
+class WattersChapterTopic(BaseModel):
+    id: str
+    label: str
+    citations: list[WattersCitation] = Field(default_factory=list)
+    subtopics: list[WattersChapterSubtopic] = Field(default_factory=list)
+
+
+class WattersChapterDetail(BaseModel):
+    chapter_n: int
+    title: str
+    roman: Optional[str] = None
+    n_citations: int
+    topics: list[WattersChapterTopic] = Field(default_factory=list)
 
 
 class WattersFrontMatter(BaseModel):

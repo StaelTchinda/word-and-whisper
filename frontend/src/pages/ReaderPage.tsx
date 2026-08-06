@@ -2,8 +2,8 @@ import { useParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { getPrayer, getSourceItem, getToc, getWattersCitations, listSources } from '../api/client'
 import { parseDisplayName } from '../sourceMeta'
-import { flattenToc } from '../toc'
-import { ReaderBreadcrumb, ReaderNav } from '../components/ReaderNav'
+import { flattenToc, lockyerReadingOrder } from '../toc'
+import { ReaderBreadcrumb, ReaderNav, type NavStop } from '../components/ReaderNav'
 import { LockyerBody, ParksBody, WattersBody } from '../components/ReaderBody'
 
 export default function ReaderPage() {
@@ -62,10 +62,43 @@ export default function ReaderPage() {
   const { title: sourceTitle } = parseDisplayName(info?.display_name ?? sourceId ?? '')
 
   const flat = tocQuery.data ? flattenToc(tocQuery.data) : []
-  const index = flat.findIndex((e) => e.item.id === itemId)
-  const entry = index >= 0 ? flat[index] : undefined
-  const prev = index > 0 ? flat[index - 1] : undefined
-  const next = index >= 0 && index < flat.length - 1 ? flat[index + 1] : undefined
+  const flatIndex = flat.findIndex((e) => e.item.id === itemId)
+  const entry = flatIndex >= 0 ? flat[flatIndex] : undefined
+
+  // Lockyer interleaves each book's own introduction into the reading
+  // order, so Prev/Next steps into/out of it at the book boundary instead
+  // of always landing on another entry -- see lockyerReadingOrder. Parks
+  // and Watters have no introduction pages, so they keep the plain
+  // entry-to-entry order from `flat` above.
+  const navStop = (id: string, kind: 'entry' | 'intro', label?: string): NavStop => ({
+    href:
+      kind === 'intro'
+        ? `/sources/lockyer1959/book-sections/${id}`
+        : `/sources/${sourceId}/${id}`,
+    label,
+  })
+
+  let position = flatIndex + 1
+  let total = flat.length
+  let prev: NavStop | undefined
+  let next: NavStop | undefined
+
+  if (sourceId === 'lockyer1959' && tocQuery.data) {
+    const order = lockyerReadingOrder(tocQuery.data)
+    const index = order.findIndex((e) => e.kind === 'entry' && e.id === itemId)
+    position = index + 1
+    total = order.length
+    const prevEntity = index > 0 ? order[index - 1] : undefined
+    const nextEntity = index >= 0 && index < order.length - 1 ? order[index + 1] : undefined
+    prev = prevEntity && navStop(prevEntity.id, prevEntity.kind, prevEntity.kind === 'intro' ? prevEntity.label : undefined)
+    next = nextEntity && navStop(nextEntity.id, nextEntity.kind, nextEntity.kind === 'intro' ? nextEntity.label : undefined)
+  } else {
+    prev = flatIndex > 0 ? navStop(flat[flatIndex - 1].item.id, 'entry') : undefined
+    next =
+      flatIndex >= 0 && flatIndex < flat.length - 1
+        ? navStop(flat[flatIndex + 1].item.id, 'entry')
+        : undefined
+  }
 
   return (
     <div className="container reader">
@@ -97,15 +130,7 @@ export default function ReaderPage() {
         />
       )}
 
-      {flat.length > 0 && (
-        <ReaderNav
-          sourceId={sourceId!}
-          prev={prev}
-          next={next}
-          position={index + 1}
-          total={flat.length}
-        />
-      )}
+      {total > 0 && <ReaderNav prev={prev} next={next} position={position} total={total} />}
     </div>
   )
 }

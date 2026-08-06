@@ -10,6 +10,14 @@ export const SOURCE_BLURBS: Record<string, string> = {
     'A public-domain 19th-century survey of prayer in the Bible, organised by its own 30 topical chapters — Who Prayed, the Grounds of Prayer, and more.',
 }
 
+// Short badge labels for contexts (search results) where "All the Prayers of
+// the Bible (Lockyer, 1959)" is too long to show once per row.
+export const SOURCE_SHORT_LABELS: Record<string, string> = {
+  parks2021: 'Parks',
+  lockyer1959: 'Lockyer',
+  watters1883: 'Watters',
+}
+
 export function pluralizeUnit(unit: string): string {
   return unit.endsWith('y') ? `${unit.slice(0, -1)}ies` : `${unit}s`
 }

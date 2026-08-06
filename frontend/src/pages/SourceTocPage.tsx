@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { getToc, listSources } from '../api/client'
@@ -6,6 +7,7 @@ import TocTree from '../components/TocTree'
 
 export default function SourceTocPage() {
   const { sourceId } = useParams<{ sourceId: string }>()
+  const [filter, setFilter] = useState('')
 
   const tocQuery = useQuery({
     queryKey: ['toc', sourceId],
@@ -52,7 +54,16 @@ export default function SourceTocPage() {
           </div>
         )}
       </div>
-      <TocTree sourceId={sourceId!} toc={toc} />
+      <div className="toc-filter-box">
+        <input
+          type="search"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder={`Filter ${title}…`}
+          aria-label={`Filter ${title}`}
+        />
+      </div>
+      <TocTree sourceId={sourceId!} toc={toc} filter={filter} />
     </div>
   )
 }
